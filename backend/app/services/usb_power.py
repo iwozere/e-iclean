@@ -1,10 +1,17 @@
 """Mitigate Windows USB selective suspend during transfers (spec §5.4).
 
 Uses `powercfg` (bundled with every Windows install) rather than calling the Power
-Management APIs directly — matches the "powercfg equivalent" phrasing in the spec, with
-no extra native dependency. Falls back to a logged no-op if `powercfg` isn't available
-(e.g. local dev on a non-Windows machine) rather than failing the transfer.
+Management APIs directly - matches the "powercfg equivalent" phrasing in the spec,
+with no extra native dependency. Falls back to a logged no-op if `powercfg` isn't
+available (e.g. local dev on a non-Windows machine) rather than failing the transfer.
+
+NOTE: powercfg has no "get value" switch - `/Q` (query) is the only way to read a
+setting, and its output must be parsed. This was confirmed by running the previous
+(wrong) `-getacvalueindex`/`-getdcvalueindex` flags against a real Windows install and
+observing "Invalid Parameters" - powercfg only supports /SetAcValueIndex and
+/SetDcValueIndex for writing, there is no matching Get switch.
 """
+import re
 import subprocess
 from typing import Optional
 
@@ -24,8 +31,7 @@ def disable_usb_selective_suspend() -> None:
     previous values so `restore_usb_selective_suspend` can put them back."""
     global _previous_ac_value, _previous_dc_value
     try:
-        _previous_ac_value = _query_value("AC")
-        _previous_dc_value = _query_value("DC")
+        _previous_ac_value, _previous_dc_value = _query_current_values()
         _set_value("AC", "0")
         _set_value("DC", "0")
         _apply()
@@ -48,21 +54,29 @@ def restore_usb_selective_suspend() -> None:
         _logger.warning("usb_power: could not restore USB selective suspend setting")
 
 
-def _query_value(mode: str) -> str:
-    flag = "-getacvalueindex" if mode == "AC" else "-getdcvalueindex"
+def _query_current_values() -> tuple[str, str]:
     out = subprocess.check_output(
-        ["powercfg", flag, "SCHEME_CURRENT", _USB_SELECTIVE_SUSPEND_SUBGROUP, _USB_SELECTIVE_SUSPEND_SETTING],
+        ["powercfg", "/Q", "SCHEME_CURRENT", _USB_SELECTIVE_SUSPEND_SUBGROUP, _USB_SELECTIVE_SUSPEND_SETTING],
         text=True,
     )
-    return out.strip().split()[-1]
+    ac = _parse_index(out, "Current AC Power Setting Index")
+    dc = _parse_index(out, "Current DC Power Setting Index")
+    return ac, dc
+
+
+def _parse_index(powercfg_output: str, label: str) -> str:
+    match = re.search(rf"{re.escape(label)}:\s*(0x[0-9A-Fa-f]+)", powercfg_output)
+    if not match:
+        raise OSError(f"could not parse '{label}' from powercfg output")
+    return str(int(match.group(1), 16))
 
 
 def _set_value(mode: str, value: str) -> None:
-    flag = "-setacvalueindex" if mode == "AC" else "-setdcvalueindex"
+    flag = "/SETACVALUEINDEX" if mode == "AC" else "/SETDCVALUEINDEX"
     subprocess.check_call(
         ["powercfg", flag, "SCHEME_CURRENT", _USB_SELECTIVE_SUSPEND_SUBGROUP, _USB_SELECTIVE_SUSPEND_SETTING, value]
     )
 
 
 def _apply() -> None:
-    subprocess.check_call(["powercfg", "-setactive", "SCHEME_CURRENT"])
+    subprocess.check_call(["powercfg", "/S", "SCHEME_CURRENT"])

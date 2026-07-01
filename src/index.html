@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>E-FileTrans</title>
+  <link rel="stylesheet" href="style.css?v=0.1.0" />
+</head>
+<body>
+  <header>
+    <h1>E-FileTrans</h1>
+    <span id="device-name" style="color: var(--text-dim); font-size: 13px"></span>
+  </header>
+
+  <main>
+    <div id="error-banner" class="banner" hidden></div>
+    <div id="connection-lost-banner" class="banner" hidden>
+      Connection lost. Reconnect your iPhone to resume &mdash; no progress was lost.
+    </div>
+
+    <section id="screen-disconnected" class="screen">
+      <h2>Connect your iPhone</h2>
+      <p>Connect your iPhone with a USB cable to begin.</p>
+    </section>
+
+    <section id="screen-awaiting_trust" class="screen" hidden>
+      <div class="spinner"></div>
+      <h2>Waiting for trust</h2>
+      <p>Unlock your iPhone and tap <strong>Trust</strong> to continue.</p>
+    </section>
+
+    <section id="screen-enumerating" class="screen" hidden>
+      <div class="spinner"></div>
+      <h2>Scanning your photo library&hellip;</h2>
+    </section>
+
+    <section id="screen-ready" class="screen" hidden>
+      <h2>Ready to transfer</h2>
+      <div class="panel">
+        <p><span id="library-item-count">0</span> items &middot; <span id="library-size">0 B</span></p>
+        <p>Destination: <span id="destination-path">(not selected)</span></p>
+        <div class="row">
+          <button id="choose-destination-btn" class="secondary">Choose Folder&hellip;</button>
+        </div>
+      </div>
+      <button id="start-transfer-btn">Start Transfer</button>
+    </section>
+
+    <section id="screen-transferring" class="screen" hidden>
+      <h2>Transferring&hellip;</h2>
+      <div class="panel">
+        <p id="transfer-current-file"></p>
+        <div class="progress-track"><div id="transfer-progress-bar" class="progress-fill"></div></div>
+        <p id="transfer-progress-label">0%</p>
+      </div>
+      <button id="pause-transfer-btn" class="secondary">Pause</button>
+    </section>
+
+    <section id="screen-verifying" class="screen" hidden>
+      <h2>Verifying transferred files&hellip;</h2>
+      <div class="panel">
+        <div class="progress-track"><div id="verify-progress-bar" class="progress-fill"></div></div>
+        <p id="verify-progress-label">0 / 0 verified</p>
+      </div>
+    </section>
+
+    <section id="screen-ready_to_clean" class="screen" hidden>
+      <h2>Free Up Space</h2>
+      <div class="panel">
+        <p><span id="cleanup-count">0</span> verified files &middot; <span id="cleanup-size">0 B</span> can be freed from your iPhone.</p>
+      </div>
+      <button id="free-up-space-btn">Free Up Space</button>
+    </section>
+
+    <section id="screen-deleting" class="screen" hidden>
+      <h2>Freeing up space&hellip;</h2>
+      <div class="panel">
+        <div class="progress-track"><div id="delete-progress-bar" class="progress-fill"></div></div>
+        <p id="delete-progress-label">0 / 0 deleted</p>
+      </div>
+    </section>
+
+    <section id="screen-done" class="screen" hidden>
+      <h2>All done</h2>
+      <p id="done-summary"></p>
+      <button id="open-destination-btn" class="secondary">
+        Open <span id="done-destination-link"></span> in Explorer
+      </button>
+    </section>
+  </main>
+
+  <footer>E-FileTrans v0.1.0</footer>
+
+  <script type="module" src="main.js?v=0.1.0"></script>
+</body>
+</html>

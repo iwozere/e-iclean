@@ -24,6 +24,9 @@ logs/
 # Node (if any tooling is added later)
 node_modules/
 
+# Claude Code local session state (permissions etc.) - not shared config
+.claude/
+
 # Editor / OS
 .vscode/
 .idea/

@@ -14,14 +14,19 @@ from app.utils.logger import setup_logger
 _logger = setup_logger(__name__)
 
 EventEmitter = Callable[[str, object], Awaitable[None]]
-ListConnectedUdids = Callable[[], set]
+ListConnectedUdids = Callable[[], Awaitable[set]]
 
 
-def default_list_connected_udids() -> set:
-    """Real implementation: confined pymobiledevice3 import (AGENTS.md §9)."""
+async def default_list_connected_udids() -> set:
+    """Real implementation: confined pymobiledevice3 import (AGENTS.md §9).
+
+    `list_devices` is a coroutine function as of pymobiledevice3 9.32.0 (confirmed
+    empirically - it was not always async in older versions, see spec §9.1).
+    """
     from pymobiledevice3.usbmux import list_devices
 
-    return {device.serial for device in list_devices()}
+    devices = await list_devices()
+    return {device.serial for device in devices}
 
 
 class DeviceWatcher:
@@ -47,7 +52,7 @@ class DeviceWatcher:
     async def poll_once(self) -> None:
         """Run a single poll iteration; public so tests can drive it deterministically."""
         try:
-            current = await asyncio.to_thread(self._list_connected_udids)
+            current = await self._list_connected_udids()
         except Exception:  # pylint: disable=broad-except
             _logger.exception("device_watcher: failed to list connected devices")
             return

@@ -312,21 +312,30 @@ src-tauri/
   Cargo.toml
   tauri.conf.json
   src/
-    main.rs              # app entrypoint, window setup, wires commands + sidecar
-    sidecar.rs            # spawns/owns the Python sidecar process, stdio plumbing
-    ipc.rs                  # JSON-RPC request/response framing, pending-request table
-    commands.rs                # #[tauri::command] handlers exposed to the webview
-    events.rs                    # typed wrappers for emitting sidecar notifications to JS
-    power.rs                       # USB selective-suspend toggle (Windows power APIs)
+    main.rs              # thin binary entrypoint, calls app_lib::run()
+    lib.rs                 # app builder, window setup, wires commands + sidecar lifecycle
+    sidecar.rs               # spawns/owns the Python sidecar process, stdio plumbing
+    ipc.rs                     # JSON-RPC request/response framing, pending-request table
+    commands.rs                  # #[tauri::command] handlers exposed to the webview
+    events.rs                      # notification -> typed Tauri event forwarding
 ```
 
 Rules:
 
-- `commands.rs` functions are thin: validate input, forward to `ipc.rs`, return/await
-  the response. No business logic here — that lives in the Python backend.
+- The webview calls one generic bridge command, `backend_call(method, params)`, which
+  forwards to `ipc.rs` and awaits the matching response — this mirrors
+  `docs/ipc_protocol.md` 1:1 instead of duplicating a bespoke Rust command per IPC
+  method. `commands.rs` stays thin: no business logic, that lives in the Python backend.
+  If a specific command later needs native-only behavior (e.g. a file-save dialog),
+  add it as its own `#[tauri::command]` alongside the generic bridge, not a replacement
+  for it.
 - Every JSON-RPC notification from the sidecar (`device_connected`,
-  `transfer_progress`, `connection_lost`, etc.) gets a typed event emitted via
-  `events.rs` — the JS side never parses raw JSON-RPC.
+  `transfer_progress`, `connection_lost`, etc.) is forwarded verbatim as a Tauri event
+  of the same name via `events.rs` — the JS side listens with `listen(eventName, ...)`
+  and never parses raw JSON-RPC framing.
+- USB selective-suspend mitigation (spec §5.4) is implemented once, in the Python
+  backend (`app/services/usb_power.py`), not duplicated in Rust — the sidecar owns its
+  own lifecycle and this avoids the two sides fighting over the same OS setting.
 - If the sidecar process dies unexpectedly, `sidecar.rs` must emit a `backend_crashed`
   event (not just log it) so the UI can show a real error state instead of hanging.
 

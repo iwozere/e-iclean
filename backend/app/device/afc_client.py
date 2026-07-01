@@ -115,19 +115,36 @@ class MockAfcClient:
 
 
 class PymobiledeviceAfcClient:
-    """Real AFC client backed by pymobiledevice3.
+    """Real AFC client backed by pymobiledevice3 (version pinned in
+    backend/requirements.txt; API surface below was confirmed empirically against the
+    installed 9.32.0 at the time this was written - re-verify on upgrade, spec §9.1).
 
-    API surface (lockdown/AfcService/listdir/stat/open/rm) matches pymobiledevice3 as
-    of the version pinned in backend/requirements.txt at the time this was written —
-    confirm against the installed version before relying on it (spec §9).
+    IMPORTANT (spec §9 open question 3, confirmed empirically): this AFC surface has
+    no fseek. `fopen`/`fread`/`fclose` operate over a single sequential read cursor
+    per handle. Resume is therefore only possible by keeping one handle open across
+    sequential chunk reads within a single file transfer; a read requested at an
+    offset that doesn't match the currently-open sequential position (e.g. because the
+    app restarted mid-file) cannot seek there and must raise `SeekNotSupportedError`
+    so the caller falls back to restarting that single file from byte 0
+    (see app/services/transfer_engine.py).
     """
 
     def __init__(self, udid: str) -> None:
+        import asyncio
+
         from pymobiledevice3.lockdown import create_using_usbmux
         from pymobiledevice3.services.afc import AfcService
 
-        self._lockdown = create_using_usbmux(serial=udid)
-        self._afc = AfcService(self._lockdown)
+        async def _connect():
+            lockdown = await create_using_usbmux(serial=udid)
+            afc = AfcService(lockdown)
+            await afc.connect()
+            return lockdown, afc
+
+        self._lockdown, self._afc = asyncio.run(_connect())
+        self._open_path: Optional[str] = None
+        self._open_handle: Optional[int] = None
+        self._open_position: int = 0
 
     def list_directory(self, remote_dir: str) -> list[AfcFileInfo]:
         out = []
@@ -153,13 +170,43 @@ class PymobiledeviceAfcClient:
         return AfcFileInfo(path=remote_path, size=int(stat["st_size"]))
 
     def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
-        with self._afc.open(remote_path, "rb") as handle:
-            if offset:
-                handle.seek(offset)
-            return handle.read(length)
+        import asyncio
+
+        if self._open_path != remote_path or offset != self._open_position:
+            if offset != 0:
+                raise SeekNotSupportedError(remote_path)
+            self._close_open_handle()
+            self._open_handle = self._afc.fopen(remote_path, "r")
+            self._open_path = remote_path
+            self._open_position = 0
+
+        chunk = asyncio.run(self._afc.fread(self._open_handle, length))
+        self._open_position += len(chunk)
+        if not chunk:
+            self._close_open_handle()
+        return chunk
+
+    def _close_open_handle(self) -> None:
+        import asyncio
+
+        if self._open_handle is not None:
+            try:
+                asyncio.run(self._afc.fclose(self._open_handle))
+            except Exception:  # pylint: disable=broad-except
+                pass
+        self._open_handle = None
+        self._open_path = None
+        self._open_position = 0
 
     def remove(self, remote_path: str) -> None:
         self._afc.rm(remote_path)
 
     def close(self) -> None:
-        self._lockdown.close()
+        import asyncio
+
+        async def _close():
+            await self._afc.close()
+            await self._lockdown.close()
+
+        self._close_open_handle()
+        asyncio.run(_close())

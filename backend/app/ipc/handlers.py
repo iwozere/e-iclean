@@ -71,7 +71,9 @@ async def handle_device_connect(params: DeviceConnectParams) -> DeviceConnectRes
     if not paired:
         return DeviceConnectResult(status="timed_out")
 
-    afc = PymobiledeviceAfcClient(params.udid)
+    # PymobiledeviceAfcClient.__init__ runs its own asyncio.run() internally (see
+    # app/device/afc_client.py), so it must be constructed off this event loop.
+    afc = await asyncio.to_thread(PymobiledeviceAfcClient, params.udid)
     state.afc_clients[params.udid] = afc
 
     with get_session() as session:

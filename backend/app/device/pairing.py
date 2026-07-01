@@ -1,35 +1,37 @@
 """Trust / pairing flow: poll until the user accepts "Trust This Computer" or times out."""
 import asyncio
 import time
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 from app.config import settings
 from app.utils.logger import setup_logger
 
 _logger = setup_logger(__name__)
 
-IsPaired = Callable[[str], bool]
-RequestPairing = Callable[[str], bool]
+IsPaired = Callable[[str], Awaitable[bool]]
+RequestPairing = Callable[[str], Awaitable[bool]]
 
 
-def default_is_paired(udid: str) -> bool:
+async def default_is_paired(udid: str) -> bool:
+    """`create_using_usbmux` is a coroutine function as of pymobiledevice3 9.32.0
+    (confirmed empirically, see spec §9.1 - API surface drifts across versions)."""
     from pymobiledevice3.lockdown import create_using_usbmux
 
-    lockdown = create_using_usbmux(serial=udid, autopair=False)
+    lockdown = await create_using_usbmux(serial=udid, autopair=False)
     try:
         return bool(lockdown.paired)
     finally:
-        lockdown.close()
+        await lockdown.close()
 
 
-def default_request_pairing(udid: str) -> bool:
+async def default_request_pairing(udid: str) -> bool:
     from pymobiledevice3.lockdown import create_using_usbmux
 
-    lockdown = create_using_usbmux(serial=udid, autopair=True)
+    lockdown = await create_using_usbmux(serial=udid, autopair=True)
     try:
         return bool(lockdown.paired)
     finally:
-        lockdown.close()
+        await lockdown.close()
 
 
 async def wait_for_trust(
@@ -52,12 +54,12 @@ async def wait_for_trust(
     """
     deadline = time.monotonic() + (timeout if timeout is not None else settings.TRUST_PROMPT_TIMEOUT_SECONDS)
 
-    if await asyncio.to_thread(is_paired, udid):
+    if await is_paired(udid):
         return True
 
     while time.monotonic() < deadline:
         try:
-            if await asyncio.to_thread(request_pairing, udid):
+            if await request_pairing(udid):
                 return True
         except Exception:  # pylint: disable=broad-except
             _logger.debug("pairing: request_pairing attempt failed for udid=%s, retrying", udid)
