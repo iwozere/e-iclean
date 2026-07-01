@@ -53,13 +53,17 @@ async def wait_for_trust(
         True if pairing succeeded, False on timeout.
     """
     deadline = time.monotonic() + (timeout if timeout is not None else settings.TRUST_PROMPT_TIMEOUT_SECONDS)
+    attempt_timeout = settings.PAIRING_ATTEMPT_TIMEOUT_SECONDS
 
-    if await is_paired(udid):
-        return True
+    try:
+        if await asyncio.wait_for(is_paired(udid), timeout=attempt_timeout):
+            return True
+    except Exception:  # pylint: disable=broad-except
+        _logger.debug("pairing: initial is_paired check failed for udid=%s", udid)
 
     while time.monotonic() < deadline:
         try:
-            if await request_pairing(udid):
+            if await asyncio.wait_for(request_pairing(udid), timeout=attempt_timeout):
                 return True
         except Exception:  # pylint: disable=broad-except
             _logger.debug("pairing: request_pairing attempt failed for udid=%s, retrying", udid)

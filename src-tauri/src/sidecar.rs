@@ -15,14 +15,29 @@ use crate::ipc::{route_incoming_line, IpcClient, PendingMap};
 
 /// Dev-mode sidecar location: the project's `backend/` folder with its own venv,
 /// resolved relative to the `src-tauri` crate directory (the cwd under `cargo tauri
-/// dev`). Production must instead resolve a frozen PyInstaller executable from the
-/// app's resource directory - not yet implemented, see docs/project_specification.md
-/// §5.8 (installer/bundling task, tracked as a follow-up, not silently assumed done).
+/// dev`).
 fn dev_python_command() -> (PathBuf, PathBuf, PathBuf) {
     let backend_dir = PathBuf::from("..").join("backend");
     let python_exe = backend_dir.join(".venv").join("Scripts").join("python.exe");
     let run_script = backend_dir.join("run.py");
     (backend_dir, python_exe, run_script)
+}
+
+/// Release-mode sidecar location: the frozen PyInstaller executable, installed next to
+/// the app binary. Confirmed empirically via `cargo tauri build` (see backend/BUILD.md):
+/// Tauri's `externalBin` step strips the `-<target_triple>` suffix from
+/// `binaries/eiclean-backend-x86_64-pc-windows-msvc.exe` and copies it to
+/// `eiclean-backend.exe` alongside `app.exe`, both in `target/release/` and in the
+/// installed layout (the generated NSIS script installs/deletes `$INSTDIR\eiclean-
+/// backend.exe`). No target-triple suffix or interpreter/script args needed here - the
+/// frozen exe is the entrypoint itself.
+fn release_backend_exe() -> Result<PathBuf, String> {
+    let exe_dir = std::env::current_exe()
+        .map_err(|e| format!("failed to resolve current_exe: {}", e))?
+        .parent()
+        .ok_or_else(|| "current_exe has no parent directory".to_string())?
+        .to_path_buf();
+    Ok(exe_dir.join("eiclean-backend.exe"))
 }
 
 /// Spawn the sidecar and wire up its stdio: a writer task drains outgoing JSON-RPC
@@ -32,16 +47,23 @@ fn dev_python_command() -> (PathBuf, PathBuf, PathBuf) {
 /// Returns the `IpcClient` for issuing requests and the `Child` handle so the caller
 /// can terminate the process on app exit.
 pub async fn spawn_sidecar(app: AppHandle) -> Result<(IpcClient, Child), String> {
-    let (backend_dir, python_exe, run_script) = dev_python_command();
+    let (program, mut command) = if cfg!(debug_assertions) {
+        let (backend_dir, python_exe, run_script) = dev_python_command();
+        let mut cmd = Command::new(&python_exe);
+        cmd.arg(&run_script).current_dir(&backend_dir);
+        (python_exe, cmd)
+    } else {
+        let backend_exe = release_backend_exe()?;
+        let cmd = Command::new(&backend_exe);
+        (backend_exe, cmd)
+    };
 
-    let mut child = Command::new(&python_exe)
-        .arg(&run_script)
-        .current_dir(&backend_dir)
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("failed to spawn backend sidecar ({}): {}", python_exe.display(), e))?;
+        .map_err(|e| format!("failed to spawn backend sidecar ({}): {}", program.display(), e))?;
 
     let stdin = child.stdin.take().expect("sidecar stdin was not piped");
     let stdout = child.stdout.take().expect("sidecar stdout was not piped");

@@ -111,10 +111,13 @@ scaffold:
   `pairing.py`, and `afc_client.py`. Re-verify if `pymobiledevice3` is upgraded.
 - **Live Photo pairing uses a filename-stem heuristic**, not Apple's actual asset
   metadata (spec §9, open question 4) — see `backend/app/services/live_photo.py`.
-- **Installer / driver bundling in progress** (spec §5.8, §9 open question 2):
-  PyInstaller freezing is underway (see `backend/BUILD.md`); NSIS/WiX packaging and
-  the Apple Mobile Device Support bundle-vs-prompt decision still need to happen
-  before a shippable installer exists.
+- **Installer / driver bundling: sidecar wiring done, driver decision still open**
+  (spec §5.8, §9 open question 2): PyInstaller freezing, `externalBin` wiring, and a
+  full `cargo tauri build` producing working MSI/NSIS installers are all validated
+  end-to-end (see `backend/BUILD.md`). Still open: the Apple Mobile Device Support
+  bundle-vs-prompt decision, and real-device validation of the frozen exe's
+  `device.connect` path (this dev machine has no usbmuxd/driver at all — see
+  `backend/BUILD.md`'s "Known issues").
 - **Native folder picker and "open in Explorer" are stubbed** in `src/main.js`
   (currently a text prompt / alert) pending the Tauri `dialog` and `opener` plugins.
 - **Settings persistence is a no-op** beyond process defaults

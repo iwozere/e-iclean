@@ -5,6 +5,10 @@
 # Tauri build artifacts
 /src-tauri/gen/
 
+# Frozen backend sidecar copied in for `externalBin` (regenerate via backend/BUILD.md;
+# source of truth is the PyInstaller output in backend/dist/, already ignored above)
+/src-tauri/binaries/
+
 # Python
 backend/.venv/
 backend/__pycache__/
