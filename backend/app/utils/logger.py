@@ -4,8 +4,8 @@ import logging.handlers
 import os
 from pathlib import Path
 
-_LOG_DIR_ENV = "EFILETRANS_LOG_DIR"
-_DEFAULT_LOG_DIR = Path(os.environ.get("APPDATA", ".")) / "EFileTrans" / "logs"
+_LOG_DIR_ENV = "EICLEAN_LOG_DIR"
+_DEFAULT_LOG_DIR = Path(os.environ.get("APPDATA", ".")) / "EiClean" / "logs"
 _MAX_BYTES = 5 * 1024 * 1024
 _BACKUP_COUNT = 5
 

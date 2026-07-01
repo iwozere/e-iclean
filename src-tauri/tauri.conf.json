@@ -1,15 +1,15 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "E-FileTrans",
+  "productName": "E-iClean",
   "version": "0.1.0",
-  "identifier": "com.efiletrans.app",
+  "identifier": "com.eiclean.app",
   "build": {
     "frontendDist": "../src"
   },
   "app": {
     "windows": [
       {
-        "title": "E-FileTrans",
+        "title": "E-iClean",
         "width": 800,
         "height": 600,
         "resizable": true,

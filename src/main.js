@@ -3,7 +3,7 @@ import { api, onEvent } from "./api.js";
 import * as ui from "./ui.js";
 
 const APP_VERSION = "0.1.0";
-console.log(`E-FileTrans web UI v${APP_VERSION}`);
+console.log(`E-iClean web UI v${APP_VERSION}`);
 
 const state = {
   screen: "disconnected",
@@ -149,7 +149,7 @@ function wireBackendEvents() {
   onEvent("verification_progress", handleVerificationProgress);
   onEvent("delete_progress", handleDeleteProgress);
   onEvent("backend_crashed", () =>
-    ui.renderError("The backend process stopped unexpectedly. Restart E-FileTrans.")
+    ui.renderError("The backend process stopped unexpectedly. Restart E-iClean.")
   );
 }
 

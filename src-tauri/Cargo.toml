@@ -1,8 +1,8 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "E-FileTrans - resumable iPhone photo/video transfer to Windows"
-authors = ["E-FileTrans"]
+description = "E-iClean - resumable iPhone photo/video transfer to Windows"
+authors = ["E-iClean"]
 license = ""
 repository = ""
 edition = "2021"

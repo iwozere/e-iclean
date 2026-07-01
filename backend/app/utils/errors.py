@@ -54,7 +54,7 @@ _MESSAGES = {
     AFC_TIMEOUT: "The iPhone stopped responding while transferring a file. Reconnect to resume.",
     AFC_IO_ERROR: "A file couldn't be read from the iPhone. It will be retried automatically.",
     DISK_FULL: "There isn't enough free space on this PC for the transfer.",
-    PERMISSION_DENIED: "E-FileTrans isn't allowed to access that location. Check folder permissions.",
+    PERMISSION_DENIED: "E-iClean isn't allowed to access that location. Check folder permissions.",
     CHECKSUM_MISMATCH: "A copied file didn't verify correctly and will be re-transferred.",
     DELETE_NOT_VERIFIED: "Files can only be deleted from the phone after they're verified.",
     BACKEND_INTERNAL: "Something went wrong. Check the log for details.",

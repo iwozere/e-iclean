@@ -1,6 +1,6 @@
-# Agent & Contributor Guide — E-FileTrans (e-iclean)
+# Agent & Contributor Guide — E-iClean
 
-This document describes the conventions and working agreements for **E-FileTrans**, a
+This document describes the conventions and working agreements for **E-iClean**, a
 local-only Windows app that copies photos/videos from an iPhone to a local folder with
 resumable transfer and verify-before-delete semantics. It is binding for both human
 developers and AI agents contributing to the codebase. It is the single source of truth
@@ -13,7 +13,7 @@ any scope decisions. This file is about *how* to build it, not *what* to build.
 
 ## 0. Project Overview
 
-E-FileTrans is a **two-process desktop app**:
+E-iClean is a **two-process desktop app**:
 
 | Path | Stack | Purpose |
 |------|-------|---------|
@@ -29,7 +29,7 @@ Runtime context:
 - iPhone communication is **USB only** for v1, via `pymobiledevice3` (usbmux, lockdownd,
   AFC). No software is installed on the iPhone beyond the stock "Trust This Computer"
   prompt.
-- Persistence is **SQLite**, one file per install at `%APPDATA%/EFileTrans/state.db`.
+- Persistence is **SQLite**, one file per install at `%APPDATA%/EiClean/state.db`.
 - This is a **fully local, no-telemetry product**. Never add a network call that isn't
   local device communication without flagging it to the user first.
 
@@ -72,7 +72,9 @@ When modifying any file in `src/`, you **MUST**:
 3. Bump the `?v=X.X.X` query parameter on **every** `<script>` and `<link>` tag in
    `index.html` so the WebView doesn't serve a stale cached asset.
 
-Also bump the version in `README.md` when shipping a user-visible change.
+Also bump the version in `docs/DEVELOPMENT.md`'s status line when shipping a
+user-visible change. `README.md` is end-user-facing marketing copy, not a technical
+doc — don't add version numbers or build status there.
 
 ---
 
@@ -132,7 +134,7 @@ from app.utils.logger import setup_logger
 _logger = setup_logger(__name__)
 ```
 
-Logs write to a local rotating file at `%APPDATA%/EFileTrans/logs/`. **Never** transmit
+Logs write to a local rotating file at `%APPDATA%/EiClean/logs/`. **Never** transmit
 logs anywhere — this product has no telemetry in MVP (§5.9, §7 of the spec).
 
 ### 3.2 Lazy formatting (always)
@@ -444,7 +446,9 @@ Rules:
     large-library enumeration performance) back to the user rather than silently
     assuming an answer — design the affected code so the assumption is a single,
     clearly-marked switch point, not baked in everywhere.
-11. Keep `README.md` and this file consistent when conventions or structure change.
+11. Keep `docs/DEVELOPMENT.md` and this file consistent when conventions or structure
+    change. Only touch the end-user `README.md` when a change actually affects what a
+    user sees or how they install/use the app.
 
 ---
 

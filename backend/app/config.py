@@ -6,11 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _default_app_data_dir() -> Path:
-    return Path(os.environ.get("APPDATA", ".")) / "EFileTrans"
+    return Path(os.environ.get("APPDATA", ".")) / "EiClean"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="EFILETRANS_")
+    model_config = SettingsConfigDict(env_prefix="EICLEAN_")
 
     # Storage locations
     APP_DATA_DIR: Path = _default_app_data_dir()

@@ -1,4 +1,4 @@
-"""Local entrypoint for the E-FileTrans backend sidecar.
+"""Local entrypoint for the E-iClean backend sidecar.
 
 Started by the Tauri shell (or directly, for dev). Reads newline-delimited
 JSON-RPC requests from stdin and writes responses/notifications to stdout,

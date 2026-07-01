@@ -1,5 +1,5 @@
 """Shared test fixtures. Every test gets an isolated in-memory-equivalent SQLite DB —
-tests must never touch the real %APPDATA%/EFileTrans state (AGENTS.md §12)."""
+tests must never touch the real %APPDATA%/EiClean state (AGENTS.md §12)."""
 from pathlib import Path
 
 import pytest
