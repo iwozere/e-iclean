@@ -75,6 +75,26 @@ or, on failure:
 `delete_progress`, `backend_crashed` (Rust-originated, sidecar process died), `error`
 (out-of-band error not tied to a specific request, e.g. a background watcher failure).
 
+`driver_missing` / `driver_available` (data: `{}`) — emitted by the device watcher
+(`backend/app/device/discovery.py`) when its usbmux poll starts/stops failing with
+`ConnectionFailedToUsbmuxdError`, i.e. Apple Mobile Device Support isn't installed on
+this machine at all (not just "no device connected"). Each fires once per state
+transition, not on every poll. The UI copy/download links live entirely on the
+frontend (`src/ui.js`) since the payload carries no message — see
+`project_specification.md` §9 open question 2 for why this isn't bundled into the
+installer instead.
+
+`verification_complete` (data: `{verified_count, total_count, item_ids}`) — emitted
+once by `backend/app/ipc/handlers.py::_run_transfer_then_verify` after every
+`transfer.start` run finishes (queue drained + verify pass done), regardless of
+whether any items actually needed (re-)verifying this run. `verification_progress`
+only fires for items verified *this run*; if a device was already fully transferred
+and verified in a prior session (transfer state persists in SQLite across app
+restarts), zero `verification_progress` events fire and the frontend would otherwise
+have no signal to leave the "Verifying…" screen. `item_ids` is the authoritative full
+list of currently-verified item ids for this device (not just ones touched this run) —
+the frontend uses it directly for `delete.batch`'s `item_ids` param.
+
 ## Versioning
 
 No version negotiation in MVP — Rust and Python ship from the same repo/build, so they

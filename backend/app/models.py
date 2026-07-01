@@ -67,3 +67,15 @@ class TransferSession(SQLModel, table=True):
     total_files: Optional[int] = None
     total_bytes: Optional[int] = None
     outcome: Optional[str] = None  # completed | interrupted | cancelled
+
+
+class Setting(SQLModel, table=True):
+    """Persisted key/value app settings (spec §5.7 points 3, 8 - destination folder
+    default, concurrency toggle). Not in the spec's §5.3 schema listing, which predates
+    this being wired up; added as a minimal key/value table rather than a dedicated
+    column per setting since MVP only needs a handful of loosely-typed values."""
+
+    __tablename__ = "settings"
+
+    key: str = Field(primary_key=True)
+    value: str

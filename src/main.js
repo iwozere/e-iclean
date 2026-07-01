@@ -14,39 +14,82 @@ const state = {
   sessionId: null,
   transferredByItem: {},
   verifiedCount: 0,
+  verifiedItemIds: [],
   deletedCount: 0,
+  transferStartedAt: null,
 };
 
+let elapsedIntervalId = null;
+
+function updateElapsedDisplay() {
+  if (!state.transferStartedAt) return;
+  const elapsedSeconds = (Date.now() - state.transferStartedAt.getTime()) / 1000;
+  ui.renderTransferElapsed(elapsedSeconds);
+}
+
+function startElapsedTimer() {
+  stopElapsedTimer();
+  updateElapsedDisplay();
+  elapsedIntervalId = setInterval(updateElapsedDisplay, 1000);
+}
+
+function stopElapsedTimer() {
+  if (elapsedIntervalId) {
+    clearInterval(elapsedIntervalId);
+    elapsedIntervalId = null;
+  }
+}
+
 function setScreen(screen) {
+  const wasTransferring = state.screen === "transferring";
   state.screen = screen;
   ui.showScreen(screen);
+  if (screen === "transferring") {
+    startElapsedTimer();
+  } else if (wasTransferring) {
+    stopElapsedTimer();
+  }
+}
+
+function backendErrorMessage(err) {
+  if (err && typeof err === "object" && typeof err.message === "string") return err.message;
+  if (typeof err === "string") return err;
+  return "Something went wrong talking to your iPhone. Reconnect and try again.";
 }
 
 async function handleDeviceConnected({ udid, display_name }) {
   state.udid = udid;
   ui.renderDeviceInfo({ displayName: display_name, udid });
   ui.setConnectionLostBanner(false);
-
-  setScreen("awaiting_trust");
-  const result = await api.deviceConnect(udid);
-  if (result.status === "timed_out") {
-    ui.renderError("Your iPhone didn't respond to the trust request in time. Reconnect and try again.");
-    setScreen("disconnected");
-    return;
-  }
   ui.renderError(null);
 
-  setScreen("enumerating");
-  const summary = await api.libraryEnumerate(udid);
-  state.totalItems = summary.total_items;
-  state.totalBytes = summary.total_bytes;
-  ui.renderLibrarySummary({ totalItems: summary.total_items, totalBytes: summary.total_bytes });
+  try {
+    setScreen("awaiting_trust");
+    const result = await api.deviceConnect(udid);
+    if (result.status === "timed_out") {
+      ui.renderError("Your iPhone didn't respond to the trust request in time. Reconnect and try again.");
+      setScreen("disconnected");
+      return;
+    }
 
-  const settings = await api.settingsGet();
-  state.destination = settings.values?.destination_default || state.destination;
-  ui.renderDestination(state.destination);
+    setScreen("enumerating");
+    const summary = await api.libraryEnumerate(udid);
+    state.totalItems = summary.total_items;
+    state.totalBytes = summary.total_bytes;
+    ui.renderLibrarySummary({ totalItems: summary.total_items, totalBytes: summary.total_bytes });
 
-  setScreen("ready");
+    const settings = await api.settingsGet();
+    state.destination = settings.values?.destination_default || state.destination;
+    ui.renderDestination(state.destination);
+
+    setScreen("ready");
+  } catch (err) {
+    // Without this, any backend error here (e.g. a dropped AFC connection mid-scan)
+    // left the user stuck on "Scanning your photo library..." forever with no
+    // feedback at all - see docs/DEVELOPMENT.md's known gaps.
+    ui.renderError(backendErrorMessage(err));
+    setScreen("disconnected");
+  }
 }
 
 function handleDeviceDisconnected() {
@@ -67,6 +110,14 @@ function handleConnectionResumed() {
   ui.setConnectionLostBanner(false);
 }
 
+function handleDriverMissing() {
+  ui.setDriverMissingBanner(true);
+}
+
+function handleDriverAvailable() {
+  ui.setDriverMissingBanner(false);
+}
+
 function handleTransferProgress(payload) {
   state.transferredByItem[payload.item_id] = payload.bytes_transferred;
   const overallTransferred = Object.values(state.transferredByItem).reduce((sum, n) => sum + n, 0);
@@ -80,10 +131,18 @@ function handleTransferProgress(payload) {
 function handleVerificationProgress(payload) {
   if (payload.verified) state.verifiedCount += 1;
   ui.renderVerificationProgress({ verifiedCount: state.verifiedCount, totalCount: state.totalItems });
-  if (state.verifiedCount >= state.totalItems && state.totalItems > 0) {
-    setScreen("ready_to_clean");
-    ui.renderReadyToClean({ verifiedCount: state.verifiedCount, freeableBytes: state.totalBytes });
-  }
+}
+
+function handleVerificationComplete({ verified_count, total_count, item_ids }) {
+  // Authoritative completion signal - verification_progress only fires for items
+  // actually (re-)verified this run, so it never fires at all when everything was
+  // already verified from a prior run (see backend/app/ipc/handlers.py). item_ids is
+  // likewise the authoritative currently-verified set, not just this run's delta.
+  state.verifiedCount = verified_count;
+  state.verifiedItemIds = item_ids;
+  ui.renderVerificationProgress({ verifiedCount: verified_count, totalCount: total_count });
+  setScreen("ready_to_clean");
+  ui.renderReadyToClean({ verifiedCount: verified_count, freeableBytes: state.totalBytes });
 }
 
 function handleDeleteProgress(payload) {
@@ -100,9 +159,12 @@ function handleDeleteProgress(payload) {
 }
 
 async function onChooseDestination() {
-  // Known gap: the native folder-picker dialog needs the Tauri dialog plugin, not
-  // yet wired - see README "Known gaps". A text prompt keeps the flow usable now.
-  const chosen = window.prompt("Destination folder path:", state.destination || "C:\\Photos");
+  const chosen = await window.__TAURI__.dialog.open({
+    directory: true,
+    multiple: false,
+    defaultPath: state.destination || undefined,
+    title: "Choose destination folder",
+  });
   if (chosen) {
     state.destination = chosen;
     ui.renderDestination(chosen);
@@ -112,6 +174,8 @@ async function onChooseDestination() {
 
 async function onStartTransfer() {
   if (!state.udid || !state.destination) return;
+  state.transferStartedAt = new Date();
+  ui.renderTransferStart(state.transferStartedAt);
   setScreen("transferring");
   const result = await api.transferStart(state.udid, state.destination);
   state.sessionId = result.session_id;
@@ -122,14 +186,22 @@ async function onPauseTransfer() {
 }
 
 async function onFreeUpSpace() {
-  const itemIds = Object.keys(state.transferredByItem).map(Number);
+  const itemIds = state.verifiedItemIds || [];
   setScreen("deleting");
   await api.deleteBatch(itemIds);
 }
 
 function onOpenDestination() {
-  // Known gap: opening Explorer needs the Tauri opener plugin, not yet wired.
+  // Known gap: opening Explorer needs the Tauri opener plugin's revealItemInDir, not
+  // yet wired here (openUrl below only covers the driver-download links).
   window.alert(`Open this folder in Explorer:\n${state.destination}`);
+}
+
+function onExternalLinkClick(event) {
+  const link = event.target.closest("a.external-link");
+  if (!link) return;
+  event.preventDefault();
+  window.__TAURI__.opener.openUrl(link.href);
 }
 
 function wireButtons() {
@@ -138,6 +210,7 @@ function wireButtons() {
   document.getElementById("pause-transfer-btn")?.addEventListener("click", onPauseTransfer);
   document.getElementById("free-up-space-btn")?.addEventListener("click", onFreeUpSpace);
   document.getElementById("open-destination-btn")?.addEventListener("click", onOpenDestination);
+  document.body.addEventListener("click", onExternalLinkClick);
 }
 
 function wireBackendEvents() {
@@ -145,8 +218,11 @@ function wireBackendEvents() {
   onEvent("device_disconnected", handleDeviceDisconnected);
   onEvent("connection_lost", handleConnectionLost);
   onEvent("connection_resumed", handleConnectionResumed);
+  onEvent("driver_missing", handleDriverMissing);
+  onEvent("driver_available", handleDriverAvailable);
   onEvent("transfer_progress", handleTransferProgress);
   onEvent("verification_progress", handleVerificationProgress);
+  onEvent("verification_complete", handleVerificationComplete);
   onEvent("delete_progress", handleDeleteProgress);
   onEvent("backend_crashed", () =>
     ui.renderError("The backend process stopped unexpectedly. Restart E-iClean.")

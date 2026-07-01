@@ -17,6 +17,24 @@
     <div id="connection-lost-banner" class="banner" hidden>
       Connection lost. Reconnect your iPhone to resume &mdash; no progress was lost.
     </div>
+    <div id="driver-missing-banner" class="banner" hidden>
+      <p>
+        <strong>Apple Mobile Device Support isn't installed.</strong> This is Apple's own
+        USB driver &mdash; Windows needs it before any app, including E-iClean, can talk to
+        an iPhone over the cable. Install it once from Apple or Microsoft, then reconnect
+        your iPhone.
+      </p>
+      <p class="banner-links">
+        <a href="https://apps.microsoft.com/search?query=Apple%20Devices" class="external-link">Get &ldquo;Apple Devices&rdquo; (Microsoft Store)</a>
+        <a href="https://support.apple.com/en-us/HT210384" class="external-link">Get iTunes for Windows (Apple.com)</a>
+      </p>
+      <p class="banner-note">
+        E-iClean doesn't include this driver in its own installer &mdash; it's Apple's
+        proprietary software, and Apple's license only allows installing it through Apple's
+        or Microsoft's own channels, not bundled inside a third-party installer. This is the
+        same reason every other iPhone desktop tool asks you to install it separately.
+      </p>
+    </div>
 
     <section id="screen-disconnected" class="screen">
       <h2>Connect your iPhone</h2>
@@ -52,6 +70,7 @@
         <p id="transfer-current-file"></p>
         <div class="progress-track"><div id="transfer-progress-bar" class="progress-fill"></div></div>
         <p id="transfer-progress-label">0%</p>
+        <p>Started: <span id="transfer-start-time"></span> &middot; Elapsed: <span id="transfer-elapsed">00:00:00</span></p>
       </div>
       <button id="pause-transfer-btn" class="secondary">Pause</button>
     </section>

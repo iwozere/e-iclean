@@ -25,6 +25,11 @@ export function setConnectionLostBanner(visible) {
   if (banner) banner.hidden = !visible;
 }
 
+export function setDriverMissingBanner(visible) {
+  const banner = document.getElementById("driver-missing-banner");
+  if (banner) banner.hidden = !visible;
+}
+
 export function renderDeviceInfo({ displayName, udid }) {
   const el = document.getElementById("device-name");
   if (el) el.textContent = displayName || udid || "";
@@ -37,6 +42,20 @@ export function renderLibrarySummary({ totalItems, totalBytes }) {
 
 export function renderDestination(path) {
   setText("destination-path", path || "(not selected)");
+}
+
+export function renderTransferStart(date) {
+  // No explicit locale/options - lets the OS/system locale decide the format,
+  // matching whatever the user's Windows regional settings already use.
+  setText("transfer-start-time", date.toLocaleString());
+}
+
+export function renderTransferElapsed(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const pad = (n) => String(n).padStart(2, "0");
+  setText("transfer-elapsed", `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
 }
 
 export function renderTransferProgress({ currentFileName, overallTransferred, overallTotal }) {

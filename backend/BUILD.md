@@ -47,14 +47,21 @@ Confirmed against the frozen exe:
 - The full `cargo tauri build` release pipeline (see below) launches `app.exe`, which spawns
   the frozen sidecar successfully and the sidecar's device-watcher loop runs continuously.
 
-**Known gap**: this dev machine has no Apple Mobile Device Support / usbmuxd installed at
-all (confirmed via the exact exception surfaced in `%APPDATA%\EiClean\logs\backend.log`:
-`pymobiledevice3.exceptions.ConnectionFailedToUsbmuxdError` / `WinError 1225 connection
-refused`), so `device.connect`'s success path against a real, trusted device has not been
-exercised end-to-end here. `device.list`/`settings.get` were confirmed identical between
-frozen and dev-mode builds under this same missing-driver condition, which is evidence (not
-proof) that freezing itself isn't the cause of any `device.connect` slowness — see the fix
-below.
+**Known gap (as of this frozen-exe test)**: this dev machine had no Apple Mobile Device
+Support / usbmuxd installed at all (confirmed via the exact exception surfaced in
+`%APPDATA%\EiClean\logs\backend.log`: `pymobiledevice3.exceptions.ConnectionFailedToUsbmuxdError`
+/ `WinError 1225 connection refused`), so `device.connect`'s success path against a real,
+trusted device had not been exercised end-to-end here. `device.list`/`settings.get` were
+confirmed identical between frozen and dev-mode builds under this same missing-driver
+condition, which is evidence (not proof) that freezing itself isn't the cause of any
+`device.connect` slowness — see the fix below.
+
+The backend now detects this condition itself (`driver_missing`/`driver_available` events,
+`backend/app/device/discovery.py`) instead of silently hanging on "Connect your iPhone" — see
+docs/DEVELOPMENT.md's "Known gaps". After installing the driver via the UI's prompt, a real
+iPhone did connect and pass the trust handshake in dev mode for the first time (see
+docs/DEVELOPMENT.md for the `AfcService` async bug that surfaced immediately after) — but this
+has not yet been re-verified against the **frozen** exe specifically, only dev mode.
 
 ### Bug found via this testing: unbounded pairing wait
 

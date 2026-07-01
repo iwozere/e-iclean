@@ -71,6 +71,20 @@ async def handle_device_connect(params: DeviceConnectParams) -> DeviceConnectRes
     if not paired:
         return DeviceConnectResult(status="timed_out")
 
+    # A prior session for this udid (e.g. before a disconnect) is never torn down by
+    # anything else - device_disconnected doesn't close it, since a mid-transfer
+    # connection_lost needs the AfcClient to keep existing for resume (see
+    # resume_session_if_paused below). Left alone, its background event-loop thread
+    # (app/device/afc_client.py) and open AFC/lockdown connection leak forever and can
+    # interfere with the new connection attempt. Close it here, right before it's
+    # replaced, since at that point we know for certain nothing will use it again.
+    old_afc = state.afc_clients.get(params.udid)
+    if old_afc is not None:
+        try:
+            await asyncio.to_thread(old_afc.close)
+        except Exception:  # pylint: disable=broad-except
+            _logger.warning("ipc.handlers: error closing stale afc client udid=%s", params.udid, exc_info=True)
+
     # PymobiledeviceAfcClient.__init__ runs its own asyncio.run() internally (see
     # app/device/afc_client.py), so it must be constructed off this event loop.
     afc = await asyncio.to_thread(PymobiledeviceAfcClient, params.udid)
@@ -132,6 +146,29 @@ def _get_or_create_session(udid: str) -> int:
 async def _run_transfer_then_verify(session_id: int, engine: TransferEngine, udid: str) -> None:
     await engine.run()
     await verify_session(udid, _events())
+
+    # verify_session only emits verification_progress for items it actually verified
+    # this run (status was copied -> verified). If every item was already verified
+    # from a prior run (e.g. relaunching against a device that's already fully
+    # transferred - SQLite state persists across restarts), zero progress events fire
+    # and the frontend, which only detects "done" by counting them, would be stuck on
+    # "Verifying..." forever. This event is the authoritative, always-fired signal.
+    with get_session() as session:
+        items = session.exec(select(TransferItem).where(TransferItem.device_udid == udid)).all()
+        verified_items = [i for i in items if i.status == STATUS_VERIFIED]
+    await _events()(
+        "verification_complete",
+        {
+            "verified_count": len(verified_items),
+            "total_count": len(items),
+            # Same reasoning as verified_count above: the frontend's Free Up Space
+            # button needs the *authoritative* list of currently-verified items, not
+            # just the ones copied this run (state.transferredByItem), or it silently
+            # deletes nothing when re-launched against an already-fully-verified
+            # device.
+            "item_ids": [i.id for i in verified_items],
+        },
+    )
 
 
 async def resume_session_if_paused(udid: str) -> None:
@@ -195,9 +232,11 @@ async def handle_delete_batch(params: DeleteBatchParams) -> DeleteBatchResult:
 @register("settings.get", EmptyParams)
 async def handle_settings_get(_params: EmptyParams) -> SettingsGetResult:
     from app.config import settings as app_settings
+    from app.services.settings_service import get_all_settings
 
     return SettingsGetResult(
         values={
+            **get_all_settings(),
             "concurrency": app_settings.TRANSFER_CONCURRENCY,
             "log_dir": str(app_settings.APP_DATA_DIR / "logs"),
         }
@@ -205,8 +244,10 @@ async def handle_settings_get(_params: EmptyParams) -> SettingsGetResult:
 
 
 @register("settings.set", SettingsSetParams)
-async def handle_settings_set(_params: SettingsSetParams) -> EmptyResult:
-    # MVP gap: settings persistence beyond process defaults is not yet implemented.
-    # See README "Known gaps" — destination-folder default and concurrency toggle
-    # need a small key/value settings table before this can do more than no-op.
+async def handle_settings_set(params: SettingsSetParams) -> EmptyResult:
+    from app.services.settings_service import set_setting
+
+    for key, value in params.values.items():
+        if value is not None:
+            set_setting(key, str(value))
     return EmptyResult()

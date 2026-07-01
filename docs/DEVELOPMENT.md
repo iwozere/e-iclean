@@ -86,11 +86,28 @@ These are explicitly deferred, either because they need hardware/licensing decis
 this environment can't make, or because they're follow-up work beyond the initial
 scaffold:
 
-- **No real-device testing yet.** This dev environment has no physical iPhone or USB
-  access. All backend logic is tested against a mocked AFC client
-  (`app.device.afc_client.MockAfcClient`). The acceptance criteria in spec §5.10
-  (5,000+ item libraries, physical cable-pull tests, etc.) still need to run against
-  real hardware before this ships.
+- **Real-device testing has started, not finished.** Once Apple Mobile Device Support
+  was installed (see the driver-detection bullet below) a real iPhone connected,
+  paired, and passed the trust handshake in this environment for the first time —
+  but `library.enumerate` immediately crashed (see the next bullet), so enumeration,
+  transfer, verify, and delete against real hardware are still unexercised past that
+  point. All backend logic remains additionally tested against a mocked AFC client
+  (`app.device.afc_client.MockAfcClient`) for the parts hardware hasn't reached yet.
+  The acceptance criteria in spec §5.10 (5,000+ item libraries, physical cable-pull
+  tests, etc.) still need to run for real.
+- **`AfcService.listdir`/`stat`/`fopen`/`rm` are coroutines too — the earlier "not
+  async" claim was a false negative from a flawed check, now fixed.** The first real
+  device connection surfaced `TypeError: 'coroutine' object is not iterable` from
+  `list_directory`. Root cause: these four methods are decorated with
+  `@path_to_str()`, which wraps the real `async def` in a plain `def` — so
+  `inspect.iscoroutinefunction()` (what the earlier investigation relied on, see
+  git history) reports `False` even though calling it still returns a coroutine that
+  must be awaited. In fact **every** `AfcService` method used here
+  (`connect/fread/fwrite/fclose/close` *and* `listdir/stat/fopen/rm`) is a coroutine
+  function; there was no non-async subset. All call sites in
+  `backend/app/device/afc_client.py` now wrap every `self._afc.*` call in
+  `asyncio.run(...)`. Lesson: don't trust `inspect.iscoroutinefunction` through an
+  unfamiliar decorator — a live smoke test is what actually caught this, twice.
 - **AFC seek/resume (spec §9 open question 3) — partially resolved by API
   inspection, not yet by hardware test.** Confirmed by reading pymobiledevice3
   9.32.0's source directly: `AfcService` has no `fseek` at all — `fopen`/`fread`/
@@ -103,25 +120,57 @@ scaffold:
   real device/iOS version; a first real-hardware test is the next step, not a
   from-scratch investigation.
 - **pymobiledevice3 API is more async than the spec assumed, now confirmed and
-  fixed**: `usbmux.list_devices`, `lockdown.create_using_usbmux`, and
-  `AfcService.connect/fread/fwrite/fclose/close` are coroutine functions in 9.32.0;
-  `fopen/listdir/stat/rm` are not. A real `cargo tauri dev` smoke test on this
+  fixed**: `usbmux.list_devices`, `lockdown.create_using_usbmux`, and every used
+  `AfcService` method (`connect/fread/fwrite/fclose/close/listdir/stat/fopen/rm`) are
+  coroutine functions in 9.32.0 — see the `listdir`/`stat`/`fopen`/`rm` bullet above
+  for the decorator gotcha that hid this. A real `cargo tauri dev` smoke test on this
   machine caught the mismatch (an unawaited-coroutine warning and a dead device
   watcher loop) before this was fixed — see `backend/app/device/discovery.py`,
   `pairing.py`, and `afc_client.py`. Re-verify if `pymobiledevice3` is upgraded.
 - **Live Photo pairing uses a filename-stem heuristic**, not Apple's actual asset
   metadata (spec §9, open question 4) — see `backend/app/services/live_photo.py`.
-- **Installer / driver bundling: sidecar wiring done, driver decision still open**
-  (spec §5.8, §9 open question 2): PyInstaller freezing, `externalBin` wiring, and a
-  full `cargo tauri build` producing working MSI/NSIS installers are all validated
-  end-to-end (see `backend/BUILD.md`). Still open: the Apple Mobile Device Support
-  bundle-vs-prompt decision, and real-device validation of the frozen exe's
-  `device.connect` path (this dev machine has no usbmuxd/driver at all — see
-  `backend/BUILD.md`'s "Known issues").
-- **Native folder picker and "open in Explorer" are stubbed** in `src/main.js`
-  (currently a text prompt / alert) pending the Tauri `dialog` and `opener` plugins.
-- **Settings persistence is a no-op** beyond process defaults
-  (`backend/app/ipc/handlers.py::handle_settings_set`) — needs a small key/value table.
+- **Installer / driver bundling: sidecar wiring done; bundling ruled out, not just
+  deferred** (spec §5.8, §9 open question 2): PyInstaller freezing, `externalBin`
+  wiring, and a full `cargo tauri build` producing working MSI/NSIS installers are all
+  validated end-to-end (see `backend/BUILD.md`). Apple Mobile Device Support cannot be
+  bundled into the installer at all — it's proprietary Apple software distributed only
+  through Apple's/Microsoft's own channels, not something a third-party installer may
+  redistribute. Instead, the backend now detects the missing-driver condition
+  (`ConnectionFailedToUsbmuxdError`, see `backend/app/device/discovery.py`) and the UI
+  shows an actionable banner with download links (`driver_missing`/`driver_available`
+  events, `docs/ipc_protocol.md`). After installing the driver via that banner, a real
+  device connected, transferred, and verified a full library end-to-end in dev mode
+  (2172 items, ~6.3 GB) — see the `PymobiledeviceAfcClient` persistent-event-loop
+  bullet below for the bugs that surfaced along the way. Still open: the same
+  validation against the **frozen** PyInstaller exe specifically, not just dev mode
+  (see `backend/BUILD.md`'s "Known issues").
+- **`PymobiledeviceAfcClient` needs one persistent event loop for its whole session,
+  not `asyncio.run()` per call** — found via the first real end-to-end transfer, which
+  died with `ConnectionResetError: Connection lost` a few calls into enumeration.
+  `asyncio.run()` tears its event loop down when the coroutine returns, but the AFC
+  connection's stream reader/writer are bound to whichever loop created them in
+  `__init__` - every subsequent call from a different, short-lived loop touches a
+  transport whose owning loop no longer exists. Fixed by running a single background
+  thread with one persistent loop for the client's lifetime
+  (`backend/app/device/afc_client.py`, `asyncio.run_coroutine_threadsafe`). Related:
+  nothing was closing a device's `PymobiledeviceAfcClient` on disconnect, leaking that
+  thread/connection forever and potentially interfering with the next reconnect -
+  `backend/app/ipc/handlers.py::handle_device_connect` now closes any stale client for
+  the same udid before creating a fresh one.
+- **Native folder picker is wired in; "open in Explorer" is still stubbed.** The
+  `dialog` plugin (`src-tauri/src/lib.rs`, `dialog:default` capability) now backs
+  `src/main.js`'s `onChooseDestination` with a real native folder picker instead of a
+  text prompt. The `opener` plugin (`opener:default`, `withGlobalTauri: true`) is
+  wired for the driver-missing banner's download links (`openUrl`), but its
+  `revealItemInDir` isn't used yet for "Open in Explorer" on the done screen — that's
+  still a `window.alert` stub.
+- **Settings persistence is implemented**: a minimal `settings` key/value table
+  (`app.models.Setting`, `backend/app/services/settings_service.py`) backs
+  `settings.get`/`settings.set`, so `destination_default` (spec §5.7 points 3, 8) now
+  survives an app restart instead of resetting to frontend-only in-memory state every
+  time. Not in the spec's §5.3 schema listing (written before this was wired up) -
+  see the model's docstring for why a generic key/value table rather than a dedicated
+  column per setting.
 - **Destination free-space warning** (spec §5.7 point 3) is not yet implemented.
 
 ## Toolchain notes

@@ -23,5 +23,7 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["process", "io-util", "rt", "macros", "sync"] }
 uuid = { version = "1", features = ["v4"] }
