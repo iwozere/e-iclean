@@ -5,7 +5,7 @@ the queue processes one item at a time (settings.TRANSFER_CONCURRENCY exists for
 future toggle, see spec §5.7 settings screen, but is not yet wired to multiple workers).
 """
 import asyncio
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Awaitable, Callable, Optional
 
 from sqlmodel import select
@@ -81,6 +81,49 @@ class TransferEngine:
                 _logger.exception("transfer_engine: unexpected error item_id=%s", item_id)
                 self._mark_failed(item_id, app_error("backend_internal").message)
 
+    def _target_subdir(self, remote_modified_at) -> str:
+        """Year-month bucket a file lands in, e.g. "2026-07". Items with no known
+        modified date (AFC didn't report one) fall into a single "unknown-date"
+        bucket rather than the destination root."""
+        if remote_modified_at is None:
+            return "unknown-date"
+        return f"{remote_modified_at.year:04d}-{remote_modified_at.month:02d}"
+
+    def _local_relative_path(self, item_id: int, file_name: str, remote_path: str, remote_modified_at) -> Path:
+        """Where this item lands under the destination folder: `YYYY-MM/file_name`.
+
+        Date-based nesting (rather than a flat destination, or mirroring Apple's raw
+        DCIM/NNNAPPLE numbering) mostly avoids filename collisions by construction -
+        different photos rarely share both a filename *and* a capture month - while
+        staying human-browsable, unlike opaque "104APPLE"-style folder names.
+
+        It doesn't *guarantee* uniqueness on its own though: two different remote
+        files can still share both a filename and a month (confirmed as a real
+        failure mode against a ~12k-item library before this had any disambiguation
+        at all - see docs/DEVELOPMENT.md). So this keeps the same fallback as before:
+        if another item for this device would land in the *same* subdir with the
+        *same* file_name, fold that item's DCIM parent folder name into the filename.
+        remote_path is unique per device (DB constraint) and the bucket is
+        deterministic from remote_modified_at, so a later resume/retry always
+        recomputes the identical path.
+        """
+        subdir = self._target_subdir(remote_modified_at)
+        with get_session() as session:
+            same_name = session.exec(
+                select(TransferItem).where(
+                    TransferItem.device_udid == self._udid,
+                    TransferItem.file_name == file_name,
+                    TransferItem.id != item_id,
+                )
+            ).all()
+        collides = any(self._target_subdir(other.remote_modified_at) == subdir for other in same_name)
+        if not collides:
+            return Path(subdir) / file_name
+        parent = PurePosixPath(remote_path).parent.name
+        stem = Path(file_name).stem
+        suffix = Path(file_name).suffix
+        return Path(subdir) / f"{stem} ({parent}){suffix}"
+
     def _next_item_id(self) -> Optional[int]:
         with get_session() as session:
             item = session.exec(
@@ -103,9 +146,13 @@ class TransferEngine:
             remote_path = item.remote_path
             remote_size = item.remote_size_bytes
             file_name = item.file_name
+            remote_modified_at = item.remote_modified_at
             db_bytes_transferred = item.bytes_transferred
 
-        local_path = self._destination / file_name
+        local_path = self._destination / self._local_relative_path(
+            item_id, file_name, remote_path, remote_modified_at
+        )
+        local_path.parent.mkdir(parents=True, exist_ok=True)
         partial_path = Path(str(local_path) + ".partial")
         offset = self._resume_offset(partial_path, db_bytes_transferred)
         mode = "r+b" if offset > 0 else "wb"

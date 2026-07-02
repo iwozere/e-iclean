@@ -76,6 +76,17 @@ export function renderReadyToClean({ verifiedCount, freeableBytes }) {
   setText("cleanup-size", formatBytes(freeableBytes));
 }
 
+export function renderCleanupFailedNote(failedCount) {
+  const el = document.getElementById("cleanup-failed-note");
+  if (!el) return;
+  if (failedCount > 0) {
+    el.textContent = `${failedCount} file${failedCount === 1 ? "" : "s"} could not be copied or verified and will not be deleted from your iPhone. Reconnect and click Start Transfer again to retry ${failedCount === 1 ? "it" : "them"}.`;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
 export function renderDeleteProgress({ deletedCount, totalCount }) {
   const pct = totalCount ? Math.round((deletedCount / totalCount) * 100) : 0;
   setWidth("delete-progress-bar", pct);

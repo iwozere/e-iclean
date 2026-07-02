@@ -14,7 +14,7 @@ from app.db import get_session
 from app.device.afc_client import PymobiledeviceAfcClient
 from app.device.pairing import wait_for_trust
 from app.ipc.dispatcher import register
-from app.models import STATUS_COPIED, STATUS_VERIFIED, Device, TransferItem, TransferSession
+from app.models import STATUS_COPIED, STATUS_FAILED, STATUS_PENDING, STATUS_VERIFIED, Device, TransferItem, TransferSession
 from app.schemas import (
     DeleteBatchParams,
     DeleteBatchResult,
@@ -116,6 +116,8 @@ async def handle_transfer_start(params: TransferStartParams) -> TransferStartRes
     if afc is None:
         raise app_error(DEVICE_NOT_FOUND)
 
+    _retry_failed_items(params.udid)
+
     session_id = _get_or_create_session(params.udid)
 
     engine = TransferEngine(params.udid, Path(params.destination), afc, _events())
@@ -124,6 +126,30 @@ async def handle_transfer_start(params: TransferStartParams) -> TransferStartRes
     asyncio.create_task(_run_transfer_then_verify(session_id, engine, params.udid))
 
     return TransferStartResult(session_id=session_id)
+
+
+def _retry_failed_items(udid: str) -> None:
+    """Reset failed items back to pending so a fresh Start Transfer retries them.
+
+    Previously, a failed item was stuck forever - _next_item_id only ever selects
+    pending/partial, so nothing revisited it. That's a real problem now that a real
+    ~12k-item transfer surfaced a filename-collision bug (see transfer_engine.py's
+    _local_filename) that left ~1000 items permanently failed with no way to recover
+    without restarting the whole device from scratch. Treat "Start Transfer" as
+    "finish the job" - retry everything not yet verified, not just what's pending.
+    """
+    with get_session() as session:
+        failed = session.exec(
+            select(TransferItem).where(TransferItem.device_udid == udid, TransferItem.status == STATUS_FAILED)
+        ).all()
+        for item in failed:
+            item.status = STATUS_PENDING
+            item.error_message = None
+            item.bytes_transferred = 0
+            session.add(item)
+        if failed:
+            _logger.info("ipc.handlers: retrying %s previously failed items udid=%s", len(failed), udid)
+            session.commit()
 
 
 def _get_or_create_session(udid: str) -> int:

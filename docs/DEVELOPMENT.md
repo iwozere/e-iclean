@@ -86,6 +86,44 @@ These are explicitly deferred, either because they need hardware/licensing decis
 this environment can't make, or because they're follow-up work beyond the initial
 scaffold:
 
+- **Fixed: filename collisions across DCIM folders silently clobbered files.**
+  Surfaced by a real ~12k-item transfer: 1094 items failed verification with "local
+  file size doesn't match," and the local file's actual content belonged to a
+  *different* item entirely. Root cause: `transfer_engine.py` built the local path
+  from the bare filename only (`destination / file_name`), but iPhone libraries
+  spread files across many `DCIM/NNNAPPLE` folders whose NNN and IMG_/MOV_ counters
+  both wrap over a large enough library — two different remote files can share one
+  bare filename, and the second one to finish writing silently overwrote the first.
+  `transfer.start` also now resets any `failed` items back to `pending`
+  (`handlers.py::_retry_failed_items`) — previously a failed item was stuck forever
+  since only `pending`/`partial` items are ever revisited, so the ~1000 items
+  corrupted by this bug had no way to recover short of re-enumerating the whole
+  device from scratch. **Caveat**: files that already collided under the old code
+  have a stray leftover at the old path (whichever item's content "won" the race)
+  even after retrying with the fix below — that file isn't automatically cleaned up,
+  since guessing which of two plausible files to delete felt riskier than leaving it
+  for manual review.
+- **Destination layout: date-based nesting (`YYYY-MM/file_name`), not flat.**
+  Chosen over both a flat destination (the collision-prone original) and mirroring
+  Apple's raw `DCIM/NNNAPPLE` numbering (collision-proof, but `104APPLE` means
+  nothing to a user browsing their backup later) — see `TransferEngine.
+  _local_relative_path` for the full reasoning. Bucketed by `remote_modified_at`
+  (`"unknown-date"` if AFC didn't report one). Date nesting mostly avoids collisions
+  by construction but doesn't guarantee it — two items can still share both a
+  filename and a capture month — so the DCIM-parent-folder-name suffix fallback from
+  the previous fix still applies, now scoped to "same month" instead of "anywhere in
+  the device," e.g. `2026-07/IMG_0005 (100APPLE).HEIC`. Fixing this also surfaced a
+  second, independent bug: `PymobiledeviceAfcClient.list_directory`/`file_info`
+  (`backend/app/device/afc_client.py`) were never populating `AfcFileInfo.
+  modified_at` from AFC's `stat()` at all — every real-device file would have landed
+  in the `"unknown-date"` bucket regardless of its real date, silently defeating this
+  feature for anything except `MockAfcClient`-based tests. Fixed alongside the
+  nesting change itself.
+  `TransferItem.remote_path` (the full AFC source path) and `local_path` (the full
+  destination path) are both already persisted per-item regardless of this nesting
+  scheme — the exact source path was always reconstructable from SQLite, this change
+  only affects where `local_path` itself points.
+
 - **Real-device testing has started, not finished.** Once Apple Mobile Device Support
   was installed (see the driver-detection bullet below) a real iPhone connected,
   paired, and passed the trust handshake in this environment for the first time —

@@ -143,6 +143,12 @@ function handleVerificationComplete({ verified_count, total_count, item_ids }) {
   ui.renderVerificationProgress({ verifiedCount: verified_count, totalCount: total_count });
   setScreen("ready_to_clean");
   ui.renderReadyToClean({ verifiedCount: verified_count, freeableBytes: state.totalBytes });
+  // total_count here is every item for this device, not just this run's queue - by
+  // this point (queue drained + verify pass done) anything not verified is failed,
+  // not still pending. Surfacing this - previously silent - is what would have told
+  // the user their item count didn't match instead of them having to notice on their
+  // own (see docs/DEVELOPMENT.md's filename-collision bug for the real case this hit).
+  ui.renderCleanupFailedNote(total_count - verified_count);
 }
 
 function handleDeleteProgress(payload) {

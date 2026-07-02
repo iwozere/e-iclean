@@ -181,7 +181,12 @@ class PymobiledeviceAfcClient:
             stat = self._run(self._afc.stat(full_path))
             if stat.get("st_ifmt") == "S_IFDIR":
                 continue
-            out.append(AfcFileInfo(path=full_path, size=int(stat["st_size"])))
+            # st_mtime is already a datetime (pymobiledevice3's AfcService.stat
+            # converts it) - this must be threaded through for date-based
+            # destination-folder nesting (transfer_engine.py) to work at all against
+            # a real device; it was silently dropped here before, which would have
+            # put every real file in the "unknown-date" bucket.
+            out.append(AfcFileInfo(path=full_path, size=int(stat["st_size"]), modified_at=stat.get("st_mtime")))
         return out
 
     def list_subdirectories(self, remote_dir: str) -> list[str]:
@@ -195,7 +200,7 @@ class PymobiledeviceAfcClient:
 
     def file_info(self, remote_path: str) -> AfcFileInfo:
         stat = self._run(self._afc.stat(remote_path))
-        return AfcFileInfo(path=remote_path, size=int(stat["st_size"]))
+        return AfcFileInfo(path=remote_path, size=int(stat["st_size"]), modified_at=stat.get("st_mtime"))
 
     def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
         if self._open_path != remote_path or offset != self._open_position:
