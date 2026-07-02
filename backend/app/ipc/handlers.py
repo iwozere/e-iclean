@@ -35,7 +35,7 @@ from app.schemas import (
     VerifyStatusResult,
 )
 from app.services.delete_service import delete_batch as run_delete_batch
-from app.services.enumeration import enumerate_library
+from app.services.enumeration import enumerate_library, requeue_missing_local_files
 from app.services.transfer_engine import TransferEngine
 from app.services.verification import verify_session
 from app.state import state
@@ -107,6 +107,7 @@ async def handle_library_enumerate(params: LibraryEnumerateParams) -> LibraryEnu
     if afc is None:
         raise app_error(DEVICE_NOT_FOUND)
     total_items, total_bytes = await asyncio.to_thread(enumerate_library, params.udid, afc)
+    await asyncio.to_thread(requeue_missing_local_files, params.udid)
     return LibraryEnumerateResult(total_items=total_items, total_bytes=total_bytes)
 
 

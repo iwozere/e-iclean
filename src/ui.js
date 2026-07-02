@@ -50,12 +50,27 @@ export function renderTransferStart(date) {
   setText("transfer-start-time", date.toLocaleString());
 }
 
-export function renderTransferElapsed(totalSeconds) {
+export function formatDuration(totalSeconds) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = Math.floor(totalSeconds % 60);
   const pad = (n) => String(n).padStart(2, "0");
-  setText("transfer-elapsed", `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+export function renderTransferElapsed(totalSeconds) {
+  setText("transfer-elapsed", formatDuration(totalSeconds));
+}
+
+export function renderCopyDuration(totalSeconds) {
+  const el = document.getElementById("cleanup-duration");
+  if (!el) return;
+  if (totalSeconds === null || totalSeconds === undefined) {
+    el.hidden = true;
+    return;
+  }
+  el.textContent = `Copy took ${formatDuration(totalSeconds)} (hh:mm:ss).`;
+  el.hidden = false;
 }
 
 export function renderTransferProgress({ currentFileName, overallTransferred, overallTotal }) {

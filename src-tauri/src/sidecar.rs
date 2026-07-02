@@ -54,7 +54,19 @@ pub async fn spawn_sidecar(app: AppHandle) -> Result<(IpcClient, Child), String>
         (python_exe, cmd)
     } else {
         let backend_exe = release_backend_exe()?;
-        let cmd = Command::new(&backend_exe);
+        let mut cmd = Command::new(&backend_exe);
+        // The frozen exe is built --console (required for stdio IPC - see
+        // backend/BUILD.md), which otherwise pops a visible console window
+        // alongside the app window since it's a real child process, not just
+        // background stdio plumbing. stderr is already captured and forwarded
+        // into the Rust log below, so the window itself has no debugging value -
+        // only suppress it here (release), not in dev, in case seeing the raw
+        // Python console output directly is useful while iterating.
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
         (backend_exe, cmd)
     };
 

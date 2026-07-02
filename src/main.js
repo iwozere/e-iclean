@@ -57,6 +57,23 @@ function backendErrorMessage(err) {
   return "Something went wrong talking to your iPhone. Reconnect and try again.";
 }
 
+async function refreshLibrary(udid) {
+  setScreen("enumerating");
+  // library.enumerate also re-validates local files against disk (see
+  // backend/app/services/enumeration.py::requeue_missing_local_files) - the same
+  // check runs whether this is the initial connect or an explicit Re-check Library.
+  const summary = await api.libraryEnumerate(udid);
+  state.totalItems = summary.total_items;
+  state.totalBytes = summary.total_bytes;
+  ui.renderLibrarySummary({ totalItems: summary.total_items, totalBytes: summary.total_bytes });
+
+  const settings = await api.settingsGet();
+  state.destination = settings.values?.destination_default || state.destination;
+  ui.renderDestination(state.destination);
+
+  setScreen("ready");
+}
+
 async function handleDeviceConnected({ udid, display_name }) {
   state.udid = udid;
   ui.renderDeviceInfo({ displayName: display_name, udid });
@@ -72,21 +89,29 @@ async function handleDeviceConnected({ udid, display_name }) {
       return;
     }
 
-    setScreen("enumerating");
-    const summary = await api.libraryEnumerate(udid);
-    state.totalItems = summary.total_items;
-    state.totalBytes = summary.total_bytes;
-    ui.renderLibrarySummary({ totalItems: summary.total_items, totalBytes: summary.total_bytes });
-
-    const settings = await api.settingsGet();
-    state.destination = settings.values?.destination_default || state.destination;
-    ui.renderDestination(state.destination);
-
-    setScreen("ready");
+    await refreshLibrary(udid);
   } catch (err) {
     // Without this, any backend error here (e.g. a dropped AFC connection mid-scan)
     // left the user stuck on "Scanning your photo library..." forever with no
     // feedback at all - see docs/DEVELOPMENT.md's known gaps.
+    ui.renderError(backendErrorMessage(err));
+    setScreen("disconnected");
+  }
+}
+
+async function onRecheckLibrary() {
+  // The only way back from Free Up Space/Done before this was disconnecting and
+  // reconnecting the device - this button is the direct equivalent, without needing
+  // the cable pulled, and it re-validates against disk (see refreshLibrary above).
+  if (!state.udid) {
+    ui.renderError("Your iPhone isn't connected. Reconnect it to check the library again.");
+    setScreen("disconnected");
+    return;
+  }
+  try {
+    ui.renderError(null);
+    await refreshLibrary(state.udid);
+  } catch (err) {
     ui.renderError(backendErrorMessage(err));
     setScreen("disconnected");
   }
@@ -149,6 +174,12 @@ function handleVerificationComplete({ verified_count, total_count, item_ids }) {
   // the user their item count didn't match instead of them having to notice on their
   // own (see docs/DEVELOPMENT.md's filename-collision bug for the real case this hit).
   ui.renderCleanupFailedNote(total_count - verified_count);
+  // transferStartedAt is only set by this session's own Start Transfer click (see
+  // onStartTransfer) - e.g. arriving here via Re-check Library on an already-fully-
+  // verified device has no meaningful duration to show, so hide it rather than
+  // report a stale or fabricated number.
+  const elapsedSeconds = state.transferStartedAt ? (Date.now() - state.transferStartedAt.getTime()) / 1000 : null;
+  ui.renderCopyDuration(elapsedSeconds);
 }
 
 function handleDeleteProgress(payload) {
@@ -216,6 +247,8 @@ function wireButtons() {
   document.getElementById("pause-transfer-btn")?.addEventListener("click", onPauseTransfer);
   document.getElementById("free-up-space-btn")?.addEventListener("click", onFreeUpSpace);
   document.getElementById("open-destination-btn")?.addEventListener("click", onOpenDestination);
+  document.getElementById("recheck-library-btn-ready")?.addEventListener("click", onRecheckLibrary);
+  document.getElementById("recheck-library-btn-done")?.addEventListener("click", onRecheckLibrary);
   document.body.addEventListener("click", onExternalLinkClick);
 }
 

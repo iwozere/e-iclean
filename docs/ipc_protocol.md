@@ -60,7 +60,7 @@ or, on failure:
 |---|---|---|---|
 | `device.list` | `{}` | `{devices: [...]}` | Current usbmux-visible devices. |
 | `device.connect` | `{udid}` | `{status, device}` | Begins pairing/trust flow if needed. |
-| `library.enumerate` | `{udid}` | `{total_items, total_bytes}` | Builds/refreshes the transfer manifest in SQLite. |
+| `library.enumerate` | `{udid}` | `{total_items, total_bytes}` | Builds/refreshes the transfer manifest in SQLite, and re-validates existing `copied`/`verified` items against disk, requeueing any as `pending` whose local file is missing or changed size (`app/services/enumeration.py::requeue_missing_local_files`) — called both on device connect and by the frontend's "Re-check Library" action. |
 | `transfer.start` | `{udid, destination}` | `{session_id}` | Starts/resumes the queue. |
 | `transfer.pause` | `{session_id}` | `{}` | Pauses without losing state. |
 | `transfer.cancel` | `{session_id}` | `{}` | Cancels; partial files remain resumable later. |

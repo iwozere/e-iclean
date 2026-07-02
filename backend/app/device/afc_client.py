@@ -67,6 +67,10 @@ class MockAfcClient:
     def __init__(self, files: Optional[dict[str, bytes]] = None) -> None:
         self._files: dict[str, bytes] = dict(files or {})
         self.unseekable_paths: set[str] = set()
+        # Test-only knob (mirrors unseekable_paths above): lets tests simulate a
+        # device reporting a modified date for a given remote_path, without needing
+        # real AFC stat() plumbing.
+        self.modified_at: dict[str, datetime] = {}
 
     def list_directory(self, remote_dir: str) -> list[AfcFileInfo]:
         prefix = remote_dir.rstrip("/") + "/"
@@ -77,7 +81,7 @@ class MockAfcClient:
             rest = path[len(prefix) :]
             if "/" in rest:
                 continue  # lives in a deeper subdirectory
-            out.append(AfcFileInfo(path=path, size=len(data)))
+            out.append(AfcFileInfo(path=path, size=len(data), modified_at=self.modified_at.get(path)))
         return out
 
     def list_subdirectories(self, remote_dir: str) -> list[str]:
@@ -93,7 +97,7 @@ class MockAfcClient:
 
     def file_info(self, remote_path: str) -> AfcFileInfo:
         data = self._get_or_raise(remote_path)
-        return AfcFileInfo(path=remote_path, size=len(data))
+        return AfcFileInfo(path=remote_path, size=len(data), modified_at=self.modified_at.get(remote_path))
 
     def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
         if remote_path in self.unseekable_paths and offset > 0:

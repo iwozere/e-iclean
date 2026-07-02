@@ -123,6 +123,36 @@ scaffold:
   destination path) are both already persisted per-item regardless of this nesting
   scheme — the exact source path was always reconstructable from SQLite, this change
   only affects where `local_path` itself points.
+- **Fixed: SQLite verification state was trusted forever, never re-checked against
+  disk.** Real user report: they deleted the whole destination folder and
+  reconnected the same, already-fully-verified device — it jumped straight to Free
+  Up Space instead of re-downloading anything, since every item still said
+  `verified` in the DB and nothing had ever asked whether the file it claims to have
+  written was still actually there. Fixed by `app/services/enumeration.
+  py::requeue_missing_local_files`: every `library.enumerate` (device connect, and
+  the new "Re-check Library" button) now stats each `copied`/`verified` item's
+  `local_path` and resets it to `pending` if the file is missing or its size no
+  longer matches, so the next `transfer.start` naturally re-copies it. Symmetric
+  with the existing `_retry_failed_items` (`handlers.py`, resets `failed` ->
+  `pending` on `transfer.start`) - together these mean SQLite state is now
+  self-healing against the real filesystem instead of assumed correct forever.
+- **Added: "Re-check Library" button** (Free Up Space and Done screens) — until now
+  there was no way back from those screens short of physically disconnecting and
+  reconnecting the device, which a user flagged directly. It re-runs
+  `library.enumerate` (triggering the self-healing check above) and returns to the
+  Ready-to-transfer screen. Deliberately scoped to this one action rather than a
+  generic multi-screen Back button/history stack — most other screen transitions
+  don't have an obviously "correct" back-target (e.g. mid-transfer), so a targeted
+  fix for the reported problem seemed better than open-ended navigation surgery.
+- **Fixed: the frozen backend's console window was visible alongside the app
+  window.** `--console` is required for stdio IPC (backend/BUILD.md), but as a real
+  child process (not just background stdio plumbing) that also means a visible
+  console window in release builds — a user noticed two windows on launch.
+  `src-tauri/src/sidecar.rs` now passes `CREATE_NO_WINDOW` when spawning the
+  release-mode sidecar (Windows-only, gated behind `cfg!(debug_assertions)` being
+  false) — stderr is already captured and forwarded into the Rust log regardless, so
+  the window itself had no debugging value. Left visible in dev mode intentionally,
+  in case seeing the raw Python console directly is useful while iterating.
 
 - **Real-device testing has started, not finished.** Once Apple Mobile Device Support
   was installed (see the driver-detection bullet below) a real iPhone connected,
