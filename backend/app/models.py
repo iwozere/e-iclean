@@ -1,6 +1,6 @@
 """SQLModel ORM models — mirrors docs/project_specification.md §5.3 exactly."""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
@@ -31,7 +31,7 @@ DELETE_ELIGIBLE_STATUSES = {STATUS_VERIFIED}
 
 
 class Device(SQLModel, table=True):
-    __tablename__ = "devices"
+    __tablename__: Any = "devices"
 
     udid: str = Field(primary_key=True)
     display_name: Optional[str] = None
@@ -39,7 +39,7 @@ class Device(SQLModel, table=True):
 
 
 class TransferItem(SQLModel, table=True):
-    __tablename__ = "transfer_items"
+    __tablename__: Any = "transfer_items"
     __table_args__ = (UniqueConstraint("device_udid", "remote_path"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -58,7 +58,7 @@ class TransferItem(SQLModel, table=True):
 
 
 class TransferSession(SQLModel, table=True):
-    __tablename__ = "transfer_sessions"
+    __tablename__: Any = "transfer_sessions"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     device_udid: str = Field(foreign_key="devices.udid")
@@ -85,7 +85,7 @@ class LibraryFile(SQLModel, table=True):
     of the iPhone-transfer data model above (no device_udid anywhere here); this
     module operates on arbitrary local folders."""
 
-    __tablename__ = "library_files"
+    __tablename__: Any = "library_files"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     local_path: str = Field(unique=True)
@@ -102,7 +102,7 @@ class LibraryFile(SQLModel, table=True):
 
 
 class DuplicateGroup(SQLModel, table=True):
-    __tablename__ = "duplicate_groups"
+    __tablename__: Any = "duplicate_groups"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     group_type: str  # exact | near
@@ -111,7 +111,7 @@ class DuplicateGroup(SQLModel, table=True):
 
 
 class DuplicateGroupMember(SQLModel, table=True):
-    __tablename__ = "duplicate_group_members"
+    __tablename__: Any = "duplicate_group_members"
 
     group_id: int = Field(foreign_key="duplicate_groups.id", primary_key=True)
     library_file_id: int = Field(foreign_key="library_files.id", primary_key=True)
@@ -123,7 +123,7 @@ class Setting(SQLModel, table=True):
     this being wired up; added as a minimal key/value table rather than a dedicated
     column per setting since MVP only needs a handful of loosely-typed values."""
 
-    __tablename__ = "settings"
+    __tablename__: Any = "settings"
 
     key: str = Field(primary_key=True)
     value: str

@@ -33,6 +33,7 @@ def test_requeues_verified_item_whose_file_is_gone(tmp_path):
     assert reset_count == 1
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_PENDING
         assert item.bytes_transferred == 0
 
@@ -46,6 +47,7 @@ def test_requeues_item_whose_file_size_changed(tmp_path):
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_PENDING
 
 
@@ -59,4 +61,5 @@ def test_leaves_intact_verified_item_untouched(tmp_path):
     assert reset_count == 0
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_VERIFIED

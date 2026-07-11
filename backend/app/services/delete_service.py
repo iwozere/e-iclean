@@ -52,7 +52,8 @@ async def delete_batch(
                 failures.append(DeleteBatchFailure(item_id=requested_id, error_code=DELETE_NOT_VERIFIED))
                 continue
 
-            member_ids = [item.id]
+            assert item.id is not None
+            member_ids: list[int] = [item.id]
             if item.live_photo_pair_id is not None:
                 member_ids.append(item.live_photo_pair_id)
             already_grouped.update(member_ids)

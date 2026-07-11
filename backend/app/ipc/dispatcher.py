@@ -3,13 +3,15 @@
 Handlers are registered by app.ipc.handlers (the wiring layer — see AGENTS.md §9,
 "routers thin, services do the work"). This module stays generic.
 """
-from typing import Any, Awaitable, Callable, Type
+from typing import Any, Awaitable, Callable, Type, TypeVar
 
 from pydantic import BaseModel
 
 from app.utils.errors import BACKEND_INTERNAL, app_error
 
-Handler = Callable[[BaseModel], Awaitable[BaseModel]]
+Handler = Callable[[Any], Awaitable[BaseModel]]
+P = TypeVar("P", bound=BaseModel)
+R = TypeVar("R", bound=BaseModel)
 
 
 class _MethodSpec:
@@ -21,10 +23,10 @@ class _MethodSpec:
 _registry: dict[str, _MethodSpec] = {}
 
 
-def register(method: str, params_model: Type[BaseModel]):
+def register(method: str, params_model: Type[P]):
     """Decorator: register `handler` as the implementation of IPC method `method`."""
 
-    def decorator(handler: Handler) -> Handler:
+    def decorator(handler: Callable[[P], Awaitable[R]]) -> Callable[[P], Awaitable[R]]:
         _registry[method] = _MethodSpec(params_model, handler)
         return handler
 

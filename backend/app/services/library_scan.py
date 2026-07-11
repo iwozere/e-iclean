@@ -232,9 +232,10 @@ def _form_duplicate_groups() -> int:
                 grouped_ids.add(member.id)
             groups_created += 1
 
-        candidates = [f for f in files if f.id not in grouped_ids and f.perceptual_hash]
+        candidates = [f for f in files if f.id not in grouped_ids and f.perceptual_hash is not None]
         clusters: list[list[LibraryFile]] = []
         for f in candidates:
+            assert f.perceptual_hash is not None
             f_hash = imagehash.hex_to_hash(f.perceptual_hash)
             placed = False
             for cluster in clusters:

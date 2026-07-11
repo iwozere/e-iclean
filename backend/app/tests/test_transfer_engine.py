@@ -53,6 +53,7 @@ async def test_transfer_marks_item_copied(destination, events):
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_COPIED
         assert item.bytes_transferred == len(data)
 
@@ -83,6 +84,7 @@ async def test_resume_seeks_to_last_confirmed_offset(destination, events):
     partial_path.write_bytes(full_data[:4096])
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         item.bytes_transferred = 4096
         item.status = STATUS_PARTIAL
         item.local_path = str(month_dir / "IMG_0003.HEIC")
@@ -161,6 +163,7 @@ async def test_disconnect_marks_item_partial_and_emits_connection_lost(destinati
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_PARTIAL
 
     assert any(event == "connection_lost" for event, _ in events.collected)
@@ -188,6 +191,7 @@ async def test_disconnect_leaves_other_pending_items_untouched(destination, even
 
     with get_session() as session:
         item_b = session.get(TransferItem, item_b_id)
+        assert item_b is not None
         assert item_b.status == STATUS_PENDING
 
 

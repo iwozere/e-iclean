@@ -21,6 +21,7 @@ def test_enumerate_backfills_missing_modified_date_on_existing_item():
 
     with get_session() as session:
         item = session.exec(select(TransferItem).where(TransferItem.remote_path == remote_path)).first()
+        assert item is not None
         assert item.remote_modified_at is None
 
     afc.modified_at[remote_path] = datetime(2026, 7, 15, 12, 0, 0)
@@ -28,6 +29,7 @@ def test_enumerate_backfills_missing_modified_date_on_existing_item():
 
     with get_session() as session:
         item = session.exec(select(TransferItem).where(TransferItem.remote_path == remote_path)).first()
+        assert item is not None
         assert item.remote_modified_at == datetime(2026, 7, 15, 12, 0, 0)
 
 

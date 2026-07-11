@@ -19,6 +19,7 @@ def _make_random_image(path: Path, seed: int) -> None:
     rng = random.Random(seed)
     img = Image.new("RGB", (64, 64))
     pixels = img.load()
+    assert pixels is not None
     for x in range(64):
         for y in range(64):
             pixels[x, y] = (rng.randrange(256), rng.randrange(256), rng.randrange(256))
@@ -32,6 +33,7 @@ def _make_near_duplicate(path: Path, source_path: Path, perturb_pixels: int = 3)
     but not byte-identical, simulating e.g. a re-save/re-compress by a different app."""
     img = Image.open(source_path).convert("RGB")
     pixels = img.load()
+    assert pixels is not None
     rng = random.Random(999)
     for _ in range(perturb_pixels):
         x, y = rng.randrange(64), rng.randrange(64)

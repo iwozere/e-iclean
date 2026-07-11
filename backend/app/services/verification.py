@@ -41,7 +41,7 @@ async def verify_session(udid: str, on_event: EventEmitter) -> tuple[int, int]:
         items = session.exec(
             select(TransferItem).where(TransferItem.device_udid == udid, TransferItem.status == STATUS_COPIED)
         ).all()
-        item_ids = [item.id for item in items]
+        item_ids = [item.id for item in items if item.id is not None]
 
     verified_count = 0
     failed_count = 0

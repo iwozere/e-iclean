@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Protocol
+from typing import Optional, Protocol, cast
 
 from app.config import settings
 from app.utils.logger import setup_logger
@@ -209,7 +209,7 @@ class PymobiledeviceAfcClient:
             # destination-folder nesting (transfer_engine.py) to work at all against
             # a real device; it was silently dropped here before, which would have
             # put every real file in the "unknown-date" bucket.
-            out.append(AfcFileInfo(path=full_path, size=int(stat["st_size"]), modified_at=stat.get("st_mtime")))
+            out.append(AfcFileInfo(path=full_path, size=int(stat["st_size"]), modified_at=cast(Optional[datetime], stat.get("st_mtime"))))
         return out
 
     def list_subdirectories(self, remote_dir: str) -> list[str]:
@@ -223,7 +223,7 @@ class PymobiledeviceAfcClient:
 
     def file_info(self, remote_path: str) -> AfcFileInfo:
         stat = self._run(self._afc.stat(remote_path))
-        return AfcFileInfo(path=remote_path, size=int(stat["st_size"]), modified_at=stat.get("st_mtime"))
+        return AfcFileInfo(path=remote_path, size=int(stat["st_size"]), modified_at=cast(Optional[datetime], stat.get("st_mtime")))
 
     def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
         # A single fread (or the fopen preceding it) can fail transiently on a session
@@ -254,6 +254,7 @@ class PymobiledeviceAfcClient:
                     self._open_path = remote_path
                     self._open_position = 0
 
+                assert self._open_handle is not None
                 chunk = self._run(self._afc.fread(self._open_handle, length))
                 self._open_position += len(chunk)
                 if not chunk:

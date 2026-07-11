@@ -1,0 +1,174 @@
+c:\dev\cursor\e-iclean\backend\app\device\afc_client.py
+  c:\dev\cursor\e-iclean\backend\app\device\afc_client.py:212:91 - error: Argument of type "str | None" cannot be assigned to parameter "modified_at" of type "datetime | None" in function "__init__"
+  Â Â Type "str | None" is not assignable to type "datetime | None"
+  Â Â Â Â Type "str" is not assignable to type "datetime | None"
+  Â Â Â Â Â Â "str" is not assignable to "datetime"
+  Â Â Â Â Â Â "str" is not assignable to "None" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\device\afc_client.py:226:85 - error: Argument of type "str | None" cannot be assigned to parameter "modified_at" of type "datetime | None" in function "__init__"
+  Â Â Type "str | None" is not assignable to type "datetime | None"
+  Â Â Â Â Type "str" is not assignable to type "datetime | None"
+  Â Â Â Â Â Â "str" is not assignable to "datetime"
+  Â Â Â Â Â Â "str" is not assignable to "None" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\device\afc_client.py:257:51 - error: Argument of type "int | None" cannot be assigned to parameter "handle" of type "int" in function "fread"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:84:2 - error: Argument of type "(_params: EmptyParams) -> CoroutineType[Any, Any, DeviceListResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(_params: EmptyParams) -> CoroutineType[Any, Any, DeviceListResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "EmptyParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "EmptyParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:89:2 - error: Argument of type "(params: DeviceConnectParams) -> CoroutineType[Any, Any, DeviceConnectResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: DeviceConnectParams) -> CoroutineType[Any, Any, DeviceConnectResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "DeviceConnectParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "DeviceConnectParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:134:2 - error: Argument of type "(params: LibraryEnumerateParams) -> CoroutineType[Any, Any, LibraryEnumerateResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: LibraryEnumerateParams) -> CoroutineType[Any, Any, LibraryEnumerateResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "LibraryEnumerateParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "LibraryEnumerateParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:144:2 - error: Argument of type "(params: TransferStartParams) -> CoroutineType[Any, Any, TransferStartResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: TransferStartParams) -> CoroutineType[Any, Any, TransferStartResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "TransferStartParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "TransferStartParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:269:2 - error: Argument of type "(params: TransferSessionParams) -> CoroutineType[Any, Any, EmptyResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: TransferSessionParams) -> CoroutineType[Any, Any, EmptyResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "TransferSessionParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "TransferSessionParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:277:2 - error: Argument of type "(params: TransferSessionParams) -> CoroutineType[Any, Any, EmptyResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: TransferSessionParams) -> CoroutineType[Any, Any, EmptyResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "TransferSessionParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "TransferSessionParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:285:2 - error: Argument of type "(params: VerifyStatusParams) -> CoroutineType[Any, Any, VerifyStatusResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: VerifyStatusParams) -> CoroutineType[Any, Any, VerifyStatusResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "VerifyStatusParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "VerifyStatusParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:297:2 - error: Argument of type "(params: DeleteBatchParams) -> CoroutineType[Any, Any, DeleteBatchResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: DeleteBatchParams) -> CoroutineType[Any, Any, DeleteBatchResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "DeleteBatchParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "DeleteBatchParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:320:2 - error: Argument of type "(params: LibraryScanStartParams) -> CoroutineType[Any, Any, EmptyResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: LibraryScanStartParams) -> CoroutineType[Any, Any, EmptyResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "LibraryScanStartParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "LibraryScanStartParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:349:2 - error: Argument of type "(_params: EmptyParams) -> CoroutineType[Any, Any, LibraryGroupsListResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(_params: EmptyParams) -> CoroutineType[Any, Any, LibraryGroupsListResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "EmptyParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "EmptyParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:384:2 - error: Argument of type "(params: LibraryDeleteBatchParams) -> CoroutineType[Any, Any, LibraryDeleteBatchResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: LibraryDeleteBatchParams) -> CoroutineType[Any, Any, LibraryDeleteBatchResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "LibraryDeleteBatchParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "LibraryDeleteBatchParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:400:2 - error: Argument of type "(_params: EmptyParams) -> CoroutineType[Any, Any, SettingsGetResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(_params: EmptyParams) -> CoroutineType[Any, Any, SettingsGetResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "EmptyParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "EmptyParams" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\ipc\handlers.py:414:2 - error: Argument of type "(params: SettingsSetParams) -> CoroutineType[Any, Any, EmptyResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: SettingsSetParams) -> CoroutineType[Any, Any, EmptyResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "SettingsSetParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "SettingsSetParams" (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\models.py
+  c:\dev\cursor\e-iclean\backend\app\models.py:34:21 - error: Type "Literal['devices']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['devices']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+  c:\dev\cursor\e-iclean\backend\app\models.py:42:21 - error: Type "Literal['transfer_items']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['transfer_items']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+  c:\dev\cursor\e-iclean\backend\app\models.py:61:21 - error: Type "Literal['transfer_sessions']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['transfer_sessions']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+  c:\dev\cursor\e-iclean\backend\app\models.py:88:21 - error: Type "Literal['library_files']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['library_files']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+  c:\dev\cursor\e-iclean\backend\app\models.py:105:21 - error: Type "Literal['duplicate_groups']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['duplicate_groups']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+  c:\dev\cursor\e-iclean\backend\app\models.py:114:21 - error: Type "Literal['duplicate_group_members']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['duplicate_group_members']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+  c:\dev\cursor\e-iclean\backend\app\models.py:126:21 - error: Type "Literal['settings']" is not assignable to declared type "declared_attr[Unknown]"
+  Â Â "Literal['settings']" is not assignable to "declared_attr[Unknown]" (reportAssignmentType)
+c:\dev\cursor\e-iclean\backend\app\services\delete_service.py
+  c:\dev\cursor\e-iclean\backend\app\services\delete_service.py:58:36 - error: Argument of type "list[int | None]" cannot be assigned to parameter "s" of type "Iterable[int]" in function "update"
+  Â Â "list[int | None]" is not assignable to "Iterable[int]"
+  Â Â Â Â Type parameter "_T_co@Iterable" is covariant, but "int | None" is not a subtype of "int"
+  Â Â Â Â Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\services\delete_service.py:60:55 - error: Argument of type "list[int | None]" cannot be assigned to parameter "member_ids" of type "list[int]" in function "_group_is_delete_eligible"
+  Â Â "list[int | None]" is not assignable to "list[int]"
+  Â Â Â Â Type parameter "_T@list" is invariant, but "int | None" is not the same as "int"
+  Â Â Â Â Consider switching from "list" to "Sequence" which is covariant (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\services\delete_service.py:69:30 - error: Argument of type "list[int | None]" cannot be assigned to parameter "iterable" of type "Iterable[int]" in function "extend"
+  Â Â "list[int | None]" is not assignable to "Iterable[int]"
+  Â Â Â Â Type parameter "_T_co@Iterable" is covariant, but "int | None" is not a subtype of "int"
+  Â Â Â Â Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\services\library_scan.py
+  c:\dev\cursor\e-iclean\backend\app\services\library_scan.py:238:44 - error: Argument of type "str | None" cannot be assigned to parameter "hexstr" of type "str" in function "hex_to_hash"
+  Â Â Type "str | None" is not assignable to type "str"
+  Â Â Â Â "None" is not assignable to "str" (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\services\transfer_engine.py
+  c:\dev\cursor\e-iclean\backend\app\services\transfer_engine.py:178:27 - error: Argument of type "int | None" cannot be assigned to parameter "__first" of type "_ColumnExpressionOrStrLabelArgument[Any] | Literal[_NoArg.NO_ARG] | None" in function "order_by"
+  Â Â Type "int | None" is not assignable to type "_ColumnExpressionOrStrLabelArgument[Any] | Literal[_NoArg.NO_ARG] | None"
+  Â Â Â Â Type "int" is not assignable to type "_ColumnExpressionOrStrLabelArgument[Any] | Literal[_NoArg.NO_ARG] | None"
+  Â Â Â Â Â Â "int" is not assignable to "None"
+  Â Â Â Â Â Â "int" is not assignable to "str"
+  Â Â Â Â Â Â "int" is not assignable to "ColumnElement[Any]"
+  Â Â Â Â Â Â "int" is incompatible with protocol "_HasClauseElement[Any]"
+  Â Â Â Â Â Â Â Â "__clause_element__" is not present
+  Â Â Â Â Â Â "int" is not assignable to "SQLCoreOperations[Any]"
+    ... (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\services\verification.py
+  c:\dev\cursor\e-iclean\backend\app\services\verification.py:50:50 - error: Argument of type "int | None" cannot be assigned to parameter "item_id" of type "int"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\services\verification.py:55:83 - error: Argument of type "int | None" cannot be assigned to parameter "item_id" of type "int" in function "__init__"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:31:51 - error: Argument of type "list[int | None]" cannot be assigned to parameter "item_ids" of type "list[int]" in function "delete_batch"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:39:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:51:51 - error: Argument of type "list[int | None]" cannot be assigned to parameter "item_ids" of type "list[int]" in function "delete_batch"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:58:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:82:51 - error: Argument of type "list[int | None]" cannot be assigned to parameter "item_ids" of type "list[int]" in function "delete_batch"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:89:22 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:114:51 - error: Argument of type "list[int | None]" cannot be assigned to parameter "item_ids" of type "list[int]" in function "delete_batch"
+  Â Â Type "int | None" is not assignable to type "int"
+  Â Â Â Â "None" is not assignable to "int" (reportArgumentType)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:120:52 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_delete_service.py:121:53 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\dev\cursor\e-iclean\backend\app\tests\test_enumeration.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_enumeration.py:24:21 - error: "remote_modified_at" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_enumeration.py:31:21 - error: "remote_modified_at" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\dev\cursor\e-iclean\backend\app\tests\test_ipc_dispatcher.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_ipc_dispatcher.py:17:2 - error: Argument of type "(params: _EchoParams) -> CoroutineType[Any, Any, _EchoResult]" cannot be assigned to parameter "handler" of type "Handler" in function "decorator"
+  Â Â Type "(params: _EchoParams) -> CoroutineType[Any, Any, _EchoResult]" is not assignable to type "Handler"
+  Â Â Â Â Parameter 1: type "BaseModel" is incompatible with type "_EchoParams"
+  Â Â Â Â Â Â "BaseModel" is not assignable to "_EchoParams" (reportArgumentType)
+c:\dev\cursor\e-iclean\backend\app\tests\test_library_scan.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_library_scan.py:24:13 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_library_scan.py:38:9 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+c:\dev\cursor\e-iclean\backend\app\tests\test_requeue_missing_local_files.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_requeue_missing_local_files.py:36:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_requeue_missing_local_files.py:37:21 - error: "bytes_transferred" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_requeue_missing_local_files.py:49:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_requeue_missing_local_files.py:62:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\dev\cursor\e-iclean\backend\app\tests\test_retry_failed_items.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_retry_failed_items.py:35:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_retry_failed_items.py:36:21 - error: "error_message" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_retry_failed_items.py:37:21 - error: "bytes_transferred" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_retry_failed_items.py:47:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_retry_failed_items.py:61:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:56:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:57:21 - error: "bytes_transferred" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:86:14 - error: "bytes_transferred" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:87:14 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:88:14 - error: "local_path" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:164:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_transfer_engine.py:191:23 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+c:\dev\cursor\e-iclean\backend\app\tests\test_verification.py
+  c:\dev\cursor\e-iclean\backend\app\tests\test_verification.py:37:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_verification.py:38:21 - error: "checksum_local" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_verification.py:45:14 - error: "remote_size_bytes" is not a known attribute of "None" (reportOptionalMemberAccess)
+  c:\dev\cursor\e-iclean\backend\app\tests\test_verification.py:53:21 - error: "status" is not a known attribute of "None" (reportOptionalMemberAccess)
+64 errors, 0 warnings, 0 informations
+

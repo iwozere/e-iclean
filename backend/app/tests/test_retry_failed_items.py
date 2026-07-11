@@ -32,6 +32,7 @@ def test_retry_resets_failed_items_to_pending():
 
     with get_session() as session:
         item = session.get(TransferItem, failed_id)
+        assert item is not None
         assert item.status == STATUS_PENDING
         assert item.error_message is None
         assert item.bytes_transferred == 0
@@ -44,6 +45,7 @@ def test_retry_leaves_other_statuses_untouched():
 
     with get_session() as session:
         item = session.get(TransferItem, verified_id)
+        assert item is not None
         assert item.status == STATUS_VERIFIED
 
 
@@ -58,4 +60,5 @@ def test_retry_resets_orphaned_in_progress_items_to_pending():
 
     with get_session() as session:
         item = session.get(TransferItem, in_progress_id)
+        assert item is not None
         assert item.status == STATUS_PENDING

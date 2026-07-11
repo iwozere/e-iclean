@@ -2,7 +2,7 @@
 import { api, onEvent } from "./api.js";
 import * as ui from "./ui.js";
 
-const APP_VERSION = "0.1.8";
+const APP_VERSION = "0.1.9";
 console.log(`E-iClean web UI v${APP_VERSION}`);
 
 const state = {
@@ -14,6 +14,7 @@ const state = {
   sessionId: null,
   verifiedCount: 0,
   verifiedItemIds: [],
+  freeableBytes: 0,
   deletedCount: 0,
   transferStartedAt: null,
   // Per-mode "last screen" so switching the top nav tab and back doesn't lose your
@@ -184,16 +185,22 @@ function handleVerificationProgress(payload) {
   ui.renderVerificationProgress({ verifiedCount: state.verifiedCount, totalCount: state.totalItems });
 }
 
-function handleVerificationComplete({ verified_count, total_count, item_ids }) {
+function handleVerificationComplete({ verified_count, total_count, item_ids, verified_bytes }) {
   // Authoritative completion signal - verification_progress only fires for items
   // actually (re-)verified this run, so it never fires at all when everything was
   // already verified from a prior run (see backend/app/ipc/handlers.py). item_ids is
   // likewise the authoritative currently-verified set, not just this run's delta.
   state.verifiedCount = verified_count;
   state.verifiedItemIds = item_ids;
+  // verified_bytes is the size of only the verified items - state.totalBytes is the
+  // whole device library as of the last enumerate (see refreshLibrary), which is
+  // wrong here whenever some items failed: it previously produced messages like
+  // "0 verified files - 6.3 GB can be freed" because the stale library-wide total was
+  // shown regardless of how many items actually verified.
+  state.freeableBytes = verified_bytes;
   ui.renderVerificationProgress({ verifiedCount: verified_count, totalCount: total_count });
   setScreen("ready_to_clean");
-  ui.renderReadyToClean({ verifiedCount: verified_count, freeableBytes: state.totalBytes });
+  ui.renderReadyToClean({ verifiedCount: verified_count, freeableBytes: verified_bytes });
   // total_count here is every item for this device, not just this run's queue - by
   // this point (queue drained + verify pass done) anything not verified is failed,
   // not still pending. Surfacing this - previously silent - is what would have told
@@ -214,8 +221,12 @@ function handleDeleteProgress(payload) {
   if (state.deletedCount >= state.verifiedCount && state.verifiedCount > 0) {
     setScreen("done");
     ui.renderDoneSummary({
-      copiedCount: state.totalItems,
-      freedBytes: state.totalBytes,
+      // Same fix as handleVerificationComplete above: state.totalItems/totalBytes are
+      // the whole device library, not what actually got verified and deleted this
+      // round - using them here overstated the done summary whenever some items had
+      // failed (e.g. claiming the full library size was freed when only a subset was).
+      copiedCount: state.verifiedCount,
+      freedBytes: state.freeableBytes,
       destination: state.destination,
     });
   }

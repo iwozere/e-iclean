@@ -242,6 +242,11 @@ async def _run_transfer_then_verify(session_id: int, engine: TransferEngine, udi
             # deletes nothing when re-launched against an already-fully-verified
             # device.
             "item_ids": [i.id for i in verified_items],
+            # Sum of only the verified items, not the whole device library (which
+            # `total_bytes` from library.enumerate reflects) - otherwise "Free Up
+            # Space" reports the full library size as freeable even when most items
+            # failed verification, e.g. "0 verified files - 6.3 GB can be freed".
+            "verified_bytes": sum(i.remote_size_bytes for i in verified_items),
         },
     )
 

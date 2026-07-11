@@ -34,6 +34,7 @@ def test_verify_one_promotes_matching_file(destination):
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_VERIFIED
         assert item.checksum_local == hashlib.sha256(data).hexdigest()
 
@@ -42,6 +43,7 @@ def test_verify_one_fails_on_size_mismatch(destination):
     item_id = _make_copied_item(destination, "IMG_0002.HEIC", b"1234567890")
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         item.remote_size_bytes = 999999
         session.add(item)
         session.commit()
@@ -50,6 +52,7 @@ def test_verify_one_fails_on_size_mismatch(destination):
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_FAILED
 
 

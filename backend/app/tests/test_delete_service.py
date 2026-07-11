@@ -25,6 +25,7 @@ async def test_refuses_to_delete_unverified_item(events):
         item = _add_item(session, "IMG_0001.HEIC", STATUS_COPIED)
         session.commit()
         session.refresh(item)
+        assert item.id is not None
         item_id = item.id
 
     afc = MockAfcClient({"/DCIM/100APPLE/IMG_0001.HEIC": b"x" * 10})
@@ -36,6 +37,7 @@ async def test_refuses_to_delete_unverified_item(events):
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_COPIED  # untouched, not silently marked deleted
 
 
@@ -45,6 +47,7 @@ async def test_deletes_verified_item(events):
         item = _add_item(session, "IMG_0002.HEIC", STATUS_VERIFIED)
         session.commit()
         session.refresh(item)
+        assert item.id is not None
         item_id = item.id
 
     afc = MockAfcClient({remote_path: b"x" * 10})
@@ -55,6 +58,7 @@ async def test_deletes_verified_item(events):
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
+        assert item is not None
         assert item.status == STATUS_DELETED
 
 
@@ -74,6 +78,7 @@ async def test_refuses_to_split_live_photo_pair(events):
         session.add(image)
         session.add(motion)
         session.commit()
+        assert image.id is not None
         image_id = image.id
 
     afc = MockAfcClient(
@@ -86,6 +91,7 @@ async def test_refuses_to_split_live_photo_pair(events):
 
     with get_session() as session:
         image = session.get(TransferItem, image_id)
+        assert image is not None
         assert image.status == STATUS_VERIFIED  # not deleted
 
 
@@ -103,6 +109,8 @@ async def test_deletes_both_halves_of_verified_live_photo_pair(events):
         session.add(image)
         session.add(motion)
         session.commit()
+        assert image.id is not None
+        assert motion.id is not None
         image_id = image.id
         motion_id = motion.id
 
@@ -117,5 +125,9 @@ async def test_deletes_both_halves_of_verified_live_photo_pair(events):
     assert failures == []
 
     with get_session() as session:
-        assert session.get(TransferItem, image_id).status == STATUS_DELETED
-        assert session.get(TransferItem, motion_id).status == STATUS_DELETED
+        image_item = session.get(TransferItem, image_id)
+        motion_item = session.get(TransferItem, motion_id)
+        assert image_item is not None
+        assert motion_item is not None
+        assert image_item.status == STATUS_DELETED
+        assert motion_item.status == STATUS_DELETED

@@ -175,7 +175,7 @@ class TransferEngine:
                     TransferItem.device_udid == self._udid,
                     TransferItem.status.in_([STATUS_PENDING, STATUS_PARTIAL]),  # type: ignore[union-attr]
                 )
-                .order_by(TransferItem.id)
+                .order_by(TransferItem.id)  # type: ignore[arg-type]
             ).first()
             return item.id if item else None
 
