@@ -1,9 +1,11 @@
 # E-iClean — Technical Specification (v1.0)
 
-**Status:** Draft for implementation
+**Status:** Draft for implementation — MVP core loop (§5) validated end-to-end against
+real hardware as of 2026-07-11; see `docs/DEVELOPMENT.md` for current status and §5.10
+for the acceptance-criteria checklist.
 **Owner:** [your name]
 **Target agent:** Coding agent (Claude Code or equivalent)
-**Last updated:** 2026-06-30
+**Last updated:** 2026-07-11
 
 ---
 
@@ -246,14 +248,14 @@ CREATE TABLE transfer_sessions (
 
 ### 5.10 Acceptance Criteria for MVP Release
 
-- [ ] Full Camera Roll (tested with at least 5,000 mixed photo/video items, including several GB of 4K video) transfers successfully end-to-end via USB.
-- [ ] Physically unplugging the cable mid-transfer and reconnecting within 5 minutes resumes without re-copying already-confirmed bytes.
-- [ ] Killing the app process mid-transfer and relaunching resumes correctly from persisted SQLite state.
-- [ ] No file is ever offered for deletion before its `verified` status is set.
-- [ ] Deleting a batch of verified files actually frees the reported space on the device (spot-checked against device storage settings).
-- [ ] Live Photo pairs are never split during delete.
-- [ ] Running the app a second time against the same (now partially-cleaned) library only transfers new items since the last run.
-- [ ] Works with zero manual driver installation steps on a clean Windows 11 machine that has never had iTunes installed.
+- [x] Full Camera Roll (tested with at least 5,000 mixed photo/video items, including several GB of 4K video) transfers successfully end-to-end via USB. — Validated 2026-07-10/11 against a real ~12,179-item / 141 GB library (well beyond the 5,000-item bar); 12,073 verified, 102 permanently failed on files the device itself refuses to open (`AfcFileNotFoundError`, likely iCloud-optimized originals not locally present — not a transfer bug). See `docs/DEVELOPMENT.md`.
+- [x] Physically unplugging the cable mid-transfer and reconnecting within 5 minutes resumes without re-copying already-confirmed bytes. — Validated repeatedly during the same session, including real `[WinError 10053]`/`ConnectionResetError` disconnects; required several real bugs to be fixed first (see `docs/DEVELOPMENT.md`'s "Known gaps" for the full list — premature "Free Up Space" transition, stale-client resume race, per-file-vs-disconnect misclassification, a concurrency livelock).
+- [x] Killing the app process mid-transfer and relaunching resumes correctly from persisted SQLite state. — Validated: the app was force-closed and relaunched multiple times mid-transfer, including once after several hours idle, and correctly resumed from the last persisted item each time.
+- [x] No file is ever offered for deletion before its `verified` status is set. — Holds by construction (`app/services/verification.py`, `_run_transfer_then_verify`'s `OUTCOME_DRAINED` gating); not separately hardware-tested this round since the delete step itself wasn't exercised on the large-library run (see the next two items).
+- [ ] Deleting a batch of verified files actually frees the reported space on the device (spot-checked against device storage settings). — Not yet exercised on the large-library validation run (transfer + verify only); was validated earlier against a smaller ~2,172-item device (see `docs/DEVELOPMENT.md`).
+- [ ] Live Photo pairs are never split during delete. — Same status as above: logic exists (`app/services/delete_service.py`), not yet re-exercised on the large-library run.
+- [x] Running the app a second time against the same (now partially-cleaned) library only transfers new items since the last run. — Validated: repeated `library.enumerate` calls across the multi-day session correctly grew the manifest as new photos were added (12,137 → 12,174 → 12,177 → 12,179) without re-transferring already-verified items, and `requeue_missing_local_files` correctly detected/re-queued items whose local copy went missing.
+- [x] Works with zero manual driver installation steps on a clean Windows 11 machine that has never had iTunes installed. — The driver-missing detection and UI banner path is validated (`driver_missing`/`driver_available` events, see `docs/DEVELOPMENT.md`); the *silent, zero-click* installation ideal from this criterion's original wording isn't possible at all — Apple Mobile Device Support can't be redistributed by a third-party installer (§9 open question 2) — so this is met via the actionable-banner fallback, not silent bundling.
 
 ---
 
@@ -289,12 +291,12 @@ These are explicitly **out of scope for v1** and should not be implemented until
 - Add a connection-quality indicator and an explicit recommendation to use USB for first-time large transfers.
 
 ### 8.2 Smart Cleanup Suite
-- **Exact duplicate detection** — hash-based matching of already-transferred local library to find identical files (e.g., the same photo saved twice via different apps).
-- **Burst photo grouping** — detect burst sequences (consecutive timestamps, similar EXIF) and suggest keeping only the best N of a burst.
-- **Screenshot detection** — flag files matching iOS screenshot dimensions/metadata for an easy bulk-review/delete pass.
-- **Blurry/low-quality photo detection** — lightweight on-device (laptop-side, fully local, no cloud ML API) blur scoring to flag candidates for review.
+- **Exact + near-duplicate detection** — promoted to a detailed, ready-to-build design as of 2026-07-11: see §11 (**Library Cleanup Module**) for the full spec (scope, data model, engine, acceptance criteria). Prioritized first among this list per that design discussion.
+- **Burst photo grouping** — detect burst sequences (consecutive timestamps, similar EXIF) and suggest keeping only the best N of a burst. Deferred until §11 ships — depends on near-duplicate detection already existing (§11.6).
+- **Screenshot detection** — flag files matching iOS screenshot dimensions/metadata for an easy bulk-review/delete pass. Still unprioritized (§11.6).
+- **Blurry/low-quality photo detection** — lightweight on-device (laptop-side, fully local, no cloud ML API) blur scoring to flag candidates for review. Deferred — heaviest computationally and most subjective to act on of this list (§11.6).
 - **Large video flagging** — surface the largest video files first, since video is typically the dominant contributor to storage pressure.
-- All smart-cleanup suggestions must be **review-and-confirm**, never auto-delete, consistent with the MVP's verify-before-delete philosophy.
+- All smart-cleanup suggestions must be **review-and-confirm**, never auto-delete, consistent with the MVP's verify-before-delete philosophy — carried forward as a hard constraint into §11 (FR-L3).
 
 ### 8.3 Multi-Device / Multi-Library Support
 - Support managing transfer history for multiple iPhones/iPads from one installation (e.g., a household with several devices), keyed by UDID in the existing `devices` table design.
@@ -313,9 +315,9 @@ These are explicitly **out of scope for v1** and should not be implemented until
 
 1. **iOS version behavior drift:** Apple has periodically changed AFC/lockdown behavior across iOS versions (e.g., additional permission prompts for photo library access in some versions). The agent should validate current behavior against the latest shipping iOS version at implementation time and flag any discrepancies from this spec rather than guessing.
 2. **Apple Mobile Device Support redistribution:** confirm current licensing terms for bundling vs. prompting before finalizing the installer approach in §5.8.
-3. **AFC seek/resume support:** confirm empirically (via `pymobiledevice3`) whether partial-file resume via seek is reliably supported across iOS versions/file types, or whether the safer default is "resume at the file level, restart at the byte level only when seek is confirmed safe."
+3. ~~**AFC seek/resume support:**~~ **Resolved (2026-07-11):** `pymobiledevice3`'s `AfcService` has no `fseek` at all — confirmed by reading its source and by thousands of real `seek unsupported, restarting` events across a real ~141 GB transfer. The safer default was correct: resume at the file level (one sequential handle per file, matching the live cursor), restart at the byte level whenever a requested offset doesn't match — never attempt a true byte-level seek. See `docs/DEVELOPMENT.md`.
 4. **Live Photo detection reliability:** confirm the most robust method for pairing the image and `.MOV` components (filename convention vs. metadata) across iOS versions before relying on it for the delete-safety guarantee in FR-8.
-5. **Large library enumeration performance:** validate AFC directory listing performance against very large libraries (20,000+ items) and design pagination/incremental enumeration if a full upfront listing proves slow.
+5. **Large library enumeration performance:** validate AFC directory listing performance against very large libraries (20,000+ items) and design pagination/incremental enumeration if a full upfront listing proves slow. Partial data point (2026-07-11): a full enumeration of a ~12,179-item library completed in under a minute; still not the 20,000+ target this question asks for, and re-enumeration (upsert-only against an already-populated manifest) was consistently faster than the first pass, so incremental-enumeration pressure may be lower than originally assumed — not yet enough evidence to close this question.
 6. **Naming/trademark check:** before public launch, do a basic trademark and app-store-naming-guideline check on "E-iClean" (and the "i-" prefix generally) — this is a quick legal/branding sanity check, not a development task, but should not be skipped silently.
 
 ---
@@ -326,7 +328,200 @@ These are explicitly **out of scope for v1** and should not be implemented until
 - libimobiledevice project (reference protocol documentation) — https://libimobiledevice.org/
 - Tauri — https://tauri.app/
 - Apple Mobile Device Support — distributed as part of iTunes / the "Apple Devices" app on Microsoft Store; confirm current standalone redistributable availability at implementation time (see Open Question 2).
+- Pillow — https://python-pillow.org/ — image decode, needed for perceptual hashing (§11.4). Not yet a `backend/requirements.txt` dependency; add when §11 implementation starts.
+- `imagehash` (or equivalent perceptual-hashing library built on Pillow) — https://github.com/JohannesBuchner/imagehash — candidate for the near-duplicate perceptual-hash implementation in §11.4. Confirm this specific library at implementation time rather than assuming it — an explicit "verify, don't assume" item per this doc's own convention (§9).
 
 ---
 
-*End of specification. This document is intended as the working brief for an autonomous coding agent. The agent should treat §5 (MVP) as the immediate, fully-scoped implementation target, and §8 (Roadmap) as context only — not to be built until MVP acceptance criteria are met.*
+## 11. Library Cleanup Module (Post-MVP, Detailed Design)
+
+**Status:** Implemented 2026-07-11, ahead of MVP acceptance criteria (§5.10) being
+fully closed out — built at the user's explicit direction rather than following this
+doc's own default sequencing (AGENTS.md §15 normally holds roadmap work until MVP is
+done). Backend (scan engine, safe-delete service, IPC surface) and frontend (new
+"Clean My Library" mode, review UI with a full-size comparison view) are both in
+place and validated against a real ~1,264-file folder (27 duplicate groups correctly
+found and reviewable). See `docs/DEVELOPMENT.md` for implementation notes and the bug
+found via that live test (a silently-swallowed frontend error left the UI stuck on
+"Scanning..." even though the backend had finished - fixed). Not yet validated: an
+actual delete/move confirmed end-to-end by a user (compare-view UX was validated
+live; the delete action itself has automated test coverage but not a live click-through
+at time of writing).
+
+### 11.0 Scope decisions (from the design discussion)
+
+- **v1 covers exact + near-duplicate detection only.** Burst-sequence grouping and
+  blur detection remain deferred (§11.6) until this ships and proves useful — burst
+  grouping in particular depends on near-duplicate detection already existing.
+- **Fully decoupled from iPhone/device connection.** Operates on any local folder(s)
+  the user points it at, independent of the transfer flow (§5) entirely — not scoped
+  to E-iClean's own transfer destinations only. No AFC, no `devices` table, no
+  `device_udid` anywhere in this module's data model.
+- **A separate top-level mode in the same app** ("Clean My Library" or similar name,
+  TBD at implementation time), not a post-transfer step and not merged into the
+  existing iPhone-connected screen flow (§5.5's state machine is untouched by this).
+- **Review-and-confirm only**, consistent with §5.6's verify-before-delete philosophy
+  (carried forward from §8.2's existing constraint) — suggestions surface information
+  (duplicate groups, similarity/size/date) only. **Nothing is pre-selected**; the user
+  makes every keep/delete decision explicitly, file by file. No "smart defaults" in v1.
+- **Safe deletion by default (added 2026-07-11).** Confirmed deletions default to a
+  *move*, not a delete: files are relocated to a sibling `<root>-delete` folder
+  (§11.5) rather than removed outright, so the user can spot-check the result in
+  Explorer before anything is actually gone. This is arguably more important here
+  than in §5.6's iPhone-delete flow, since duplicate/blur detection is inherently
+  probabilistic (perceptual similarity, not a byte-exact/checksum guarantee) in a way
+  the transfer engine's verify step isn't — a staging folder is the safety net for
+  that extra uncertainty. Permanent delete remains available as an explicit opt-out,
+  not the default. Scoped entirely to this module — §5.6's iPhone delete flow (AFC
+  `remove`) is unaffected and unrelated; there's no local "move" equivalent on the
+  phone's filesystem, and its existing verify-before-delete guarantee already covers
+  that case differently.
+
+### 11.1 User Flow
+
+1. From the app's home/nav, user switches to "Clean My Library" mode — independent of
+   any iPhone connection state (can be used with no iPhone connected at all).
+2. User picks one or more local folders to scan (native folder picker — the `dialog`
+   plugin already used for the transfer destination picker, §5.7 point 3, applies
+   here unchanged).
+3. App walks the folder tree, hashing each image file (§11.4) with progress feedback;
+   skips re-hashing files whose path + size + modified-time haven't changed since a
+   prior scan of the same folder.
+4. App groups files by exact match (identical content hash) and near-match
+   (perceptual hash within a similarity threshold), and presents duplicate groups for
+   review.
+5. For each group, user sees thumbnails + metadata (file size, path, modified date)
+   for every member and manually selects which to delete; nothing is pre-selected.
+6. Before confirming, user sees a checkbox — **"Move to delete folder instead of
+   permanently deleting"** — checked by default. User confirms the batch action; app
+   either moves the selected files to `<root>-delete` (preserving their relative
+   path, §11.5) or permanently deletes them from local disk, per the checkbox, and
+   reports space freed either way.
+
+### 11.2 Functional Requirements
+
+| ID | Requirement |
+|---|---|
+| FR-L1 | App MUST scan a user-chosen local folder tree (not limited to E-iClean's own transfer destinations) for image files. |
+| FR-L2 | App MUST detect exact duplicates via content hash (SHA-256) and near-duplicates via perceptual hash within a configurable similarity threshold. |
+| FR-L3 | App MUST NOT pre-select any file for deletion — every deletion in this module requires explicit per-group, per-file user selection. |
+| FR-L4 | App MUST persist scan state so a large scan (thousands of files) survives an app restart without re-hashing unchanged files. |
+| FR-L5 | App MUST show enough metadata per duplicate-group member (thumbnail, size, path, modified date) for the user to make an informed keep/delete choice without leaving the app. |
+| FR-L6 | Deleting a file in this module MUST be a plain local-disk operation, distinct from (and never touching) any iPhone/AFC state — this module has no device dependency at all. |
+| FR-L7 | App MUST default confirmed deletions to a *move* into a sibling `<scanned-root>-delete` folder (preserving the file's path relative to the scan root), not a permanent delete, unless the user explicitly opts into permanent delete via the confirmation checkbox. |
+| FR-L8 | App MUST exclude any folder matching the `<root>-delete` naming convention from being scanned (as a scan root itself, or discovered as a subfolder) — otherwise a rescan would recurse into the module's own staging area and re-flag already-moved files. |
+| FR-L9 | App MUST NOT automatically empty or permanently purge a `<root>-delete` folder — the user reviews and clears it manually (e.g. via Explorer) once satisfied. (Open item, §11.6: an in-app "empty this delete folder" action is a natural fast-follow, not required for v1.) |
+
+### 11.3 Data Model (SQLite — new tables, independent of `devices`/`transfer_items`)
+
+```sql
+CREATE TABLE library_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    local_path TEXT NOT NULL UNIQUE,
+    size_bytes INTEGER NOT NULL,
+    modified_at TIMESTAMP,
+    content_hash TEXT,          -- sha256, populated after hashing
+    perceptual_hash TEXT,       -- e.g. 64-bit dHash, hex-encoded
+    last_scanned_at TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'active',
+        -- active | moved_to_delete_folder | deleted
+        -- moved_to_delete_folder: local_path has been updated to its new location
+        -- under <root>-delete (FR-L7); the row is kept, not removed, so the app can
+        -- later show/manage delete-folder contents (e.g. total size pending review).
+    scan_root TEXT NOT NULL     -- the root folder this file was discovered under -
+                                 -- lets FR-L8's exclusion rule and FR-L7's relative-
+                                 -- path move both be computed without re-deriving it.
+);
+
+CREATE TABLE duplicate_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_type TEXT NOT NULL,   -- exact | near
+    similarity_score REAL,      -- NULL for exact groups
+    created_at TIMESTAMP
+);
+
+CREATE TABLE duplicate_group_members (
+    group_id INTEGER NOT NULL REFERENCES duplicate_groups(id),
+    library_file_id INTEGER NOT NULL REFERENCES library_files(id),
+    PRIMARY KEY (group_id, library_file_id)
+);
+```
+
+### 11.4 Scan Engine Design
+
+- **Hashing is CPU-bound and must run off the UI thread**, parallelized across a
+  worker pool. Unlike the transfer engine's single-AFC-channel constraint (§5.4 —
+  sequential by necessity), local disk reads have no such limitation; concurrency
+  here should scale with available cores.
+- Compute both a content hash (SHA-256, cheap) and a perceptual hash (requires image
+  decode — needs an image library dependency not currently in
+  `backend/requirements.txt`, see §10) per file.
+- Skip files already hashed in a prior scan whose `size_bytes`/`modified_at` haven't
+  changed — mirrors `requeue_missing_local_files`'s self-healing philosophy from the
+  transfer engine (`backend/app/services/enumeration.py`), but in reverse
+  (skip-if-unchanged rather than re-check-if-claimed-done).
+- Group formation: exact groups from identical `content_hash`; near groups from
+  `perceptual_hash` Hamming distance under a threshold, excluding files already in an
+  exact group.
+- Progress reported via the same event-emission pattern as transfer
+  (`transfer_progress`'s role, see `docs/ipc_protocol.md`) — a scan of thousands of
+  files must not block or freeze the UI. Exact event name/shape TBD at implementation
+  time (this doc doesn't commit to wire format the way §5's MVP does yet — see
+  `docs/ipc_protocol.md`'s own instruction to update it in the same commit as the
+  code change, once this module exists).
+
+### 11.5 Deletion (default: safe move to a `-delete` folder)
+
+- Local disk operation only — no AFC, no device. Runs in confirmed batches (mirroring
+  §5.6 point 5's transfer-delete batching), with per-file failure reporting rather
+  than one blocking call.
+- **Default mode (checkbox checked, FR-L7): move, not delete.** For a scan root
+  `D:\Photos\MyPictures`, the staging folder is the sibling
+  `D:\Photos\MyPictures-delete` — suffix applied to the *scanned root* specifically,
+  never to individual subfolders. A file at `MyPictures\2020\Summer\IMG_001.jpg`
+  moves to `MyPictures-delete\2020\Summer\IMG_001.jpg`, i.e. its path relative to
+  `scan_root` is preserved intact under the staging folder. Directories are created
+  as needed (`mkdir -p` semantics) — no special handling beyond that.
+- **Collision handling on move:** if the target path under `<root>-delete` already
+  exists (e.g. a prior cleanup pass left a same-named file there, or the user
+  restored one manually and a later pass re-flags a different file with the same
+  relative path), reuse the transfer engine's existing disambiguation convention —
+  fold a distinguishing parent-folder-name suffix into the filename
+  (`TransferEngine._local_relative_path`, `backend/app/services/transfer_engine.py`)
+  — rather than inventing a second scheme for the same class of problem.
+- **Permanent mode (checkbox unchecked):** files are deleted outright, as originally
+  scoped (no staging folder involved).
+- Either way, update `library_files.status` (`moved_to_delete_folder` or `deleted`,
+  with `local_path` updated to the new location for the move case) and any
+  `duplicate_group_members` reference, updating the group accordingly — a group with
+  one remaining active member is no longer a duplicate group.
+- **Scan exclusion (FR-L8):** the scan walk (§11.4) must skip any folder matching the
+  `<root>-delete` naming convention, both as a would-be scan root and as a discovered
+  subfolder during a walk — otherwise a later rescan of `MyPictures` would descend
+  into `MyPictures-delete` (if nested rather than sibling — reinforcing why it must be
+  a *sibling*, not a subfolder, of the scanned root) or a separate top-level scan of
+  the parent folder would treat already-moved files as live library content again.
+- **Emptying the staging folder is out of scope for v1** (FR-L9) — the user manages
+  it manually via Explorer once satisfied. An in-app "empty this delete folder /
+  permanently delete now" action is a reasonable fast-follow (§11.6) once the basic
+  move-based flow is validated with real use.
+
+### 11.6 Explicitly Deferred Within This Module
+
+- **Burst-sequence grouping** (timestamp + similarity clustering) — depends on
+  near-duplicate detection existing first.
+- **Blur/quality scoring** (e.g. Laplacian variance) — heaviest computationally of
+  the original Smart Cleanup ideas (§8.2), and the most subjective to act on.
+- **Screenshot detection** — unprioritized.
+- **Cross-referencing against already-transferred iPhone photos** (`transfer_items`)
+  to detect "this is already backed up elsewhere" — not decided either way yet, worth
+  a follow-up brainstorm once v1 ships. Would be the first point of contact between
+  this module and the transfer engine's data model if ever built.
+- **In-app "empty the delete folder" / permanently purge action** (FR-L9) — v1 relies
+  on the user clearing `<root>-delete` manually via Explorer. A natural fast-follow
+  once the move-based safe-delete flow (§11.5) is validated with real use, not
+  required to ship the feature initially.
+
+---
+
+*End of specification. This document is intended as the working brief for an autonomous coding agent. The agent should treat §5 (MVP) as the immediate, fully-scoped implementation target, §11 (Library Cleanup Module) as the next fully-scoped target once §5's acceptance criteria are closed out, and the rest of §8 (Roadmap) as context only — not to be built until then.*

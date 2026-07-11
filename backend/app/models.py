@@ -69,6 +69,54 @@ class TransferSession(SQLModel, table=True):
     outcome: Optional[str] = None  # completed | interrupted | cancelled
 
 
+# Fixed status values for library_files.status (spec §11.3). Never invent ad-hoc
+# strings - mirrors the transfer_items.status convention above.
+LIBRARY_FILE_ACTIVE = "active"
+LIBRARY_FILE_MOVED_TO_DELETE_FOLDER = "moved_to_delete_folder"
+LIBRARY_FILE_DELETED = "deleted"
+
+# Duplicate group classification (spec §11.3).
+DUPLICATE_GROUP_EXACT = "exact"
+DUPLICATE_GROUP_NEAR = "near"
+
+
+class LibraryFile(SQLModel, table=True):
+    """A file discovered by a Library Cleanup scan (spec §11.3) - fully independent
+    of the iPhone-transfer data model above (no device_udid anywhere here); this
+    module operates on arbitrary local folders."""
+
+    __tablename__ = "library_files"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    local_path: str = Field(unique=True)
+    size_bytes: int
+    modified_at: Optional[datetime] = None
+    content_hash: Optional[str] = None  # sha256, populated after hashing
+    perceptual_hash: Optional[str] = None  # e.g. 64-bit dHash, hex-encoded
+    last_scanned_at: Optional[datetime] = None
+    status: str = Field(default=LIBRARY_FILE_ACTIVE)
+    # The scan root this file was discovered under - lets the scan-exclusion rule
+    # (spec FR-L8) and the delete-folder relative-path move (FR-L7) both be computed
+    # without re-deriving it from local_path.
+    scan_root: str
+
+
+class DuplicateGroup(SQLModel, table=True):
+    __tablename__ = "duplicate_groups"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    group_type: str  # exact | near
+    similarity_score: Optional[float] = None  # NULL for exact groups
+    created_at: Optional[datetime] = None
+
+
+class DuplicateGroupMember(SQLModel, table=True):
+    __tablename__ = "duplicate_group_members"
+
+    group_id: int = Field(foreign_key="duplicate_groups.id", primary_key=True)
+    library_file_id: int = Field(foreign_key="library_files.id", primary_key=True)
+
+
 class Setting(SQLModel, table=True):
     """Persisted key/value app settings (spec §5.7 points 3, 8 - destination folder
     default, concurrency toggle). Not in the spec's §5.3 schema listing, which predates

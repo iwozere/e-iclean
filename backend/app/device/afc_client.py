@@ -15,9 +15,15 @@ device before relying on it for the acceptance criteria in spec §5.10.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Protocol
+
+from app.config import settings
+from app.utils.logger import setup_logger
+
+_logger = setup_logger(__name__)
 
 
 @dataclass
@@ -29,6 +35,19 @@ class AfcFileInfo:
 
 class SeekNotSupportedError(Exception):
     """Raised when a resume seek is known to be unreliable for this handle/file."""
+
+
+class AfcConnectionLostError(Exception):
+    """Raised only when a read fails in a way that looks like the underlying AFC/
+    lockdown session itself died (transport-level failure, retried and never
+    recovered) - as opposed to the device responding normally with a per-file error
+    status (e.g. "file not found"), which is that one item's problem, not the whole
+    queue's. Confirmed against a real ~141GB/12k-item transfer: a single missing/
+    inaccessible file (pymobiledevice3's AfcFileNotFoundError - the device answered
+    just fine, with an error) was being misclassified as a full disconnect, pausing
+    the entire transfer and showing "Connection lost" for something that wasn't a
+    connection problem at all. Only this exception should map to DEVICE_DISCONNECTED
+    in transfer_engine.py; anything else is a normal per-item failure."""
 
 
 class AfcClient(Protocol):
@@ -207,19 +226,59 @@ class PymobiledeviceAfcClient:
         return AfcFileInfo(path=remote_path, size=int(stat["st_size"]), modified_at=stat.get("st_mtime"))
 
     def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
-        if self._open_path != remote_path or offset != self._open_position:
-            if offset != 0:
-                raise SeekNotSupportedError(remote_path)
-            self._close_open_handle()
-            self._open_handle = self._run(self._afc.fopen(remote_path, "r"))
-            self._open_path = remote_path
-            self._open_position = 0
+        # A single fread (or the fopen preceding it) can fail transiently on a session
+        # that's otherwise still alive - confirmed against a real ~141GB/12k-item
+        # transfer, where the device never left usbmux at all. Retrying here, forcing
+        # a fresh fopen each attempt, resolves those without ever surfacing
+        # "connection lost" to the user.
+        #
+        # AfcException (and subclasses, e.g. AfcFileNotFoundError) means the AFC
+        # service answered normally, just with an error status for this one file -
+        # confirmed live against a real device: status 8 (object not found) on a
+        # single HEIC out of 12174 items. That's not a connection problem, retrying
+        # the identical fopen won't change the outcome, and it must NOT be classified
+        # as AfcConnectionLostError below - doing so previously paused the *entire*
+        # transfer and showed a misleading "Connection lost" banner for one bad file.
+        # Let it propagate as-is; transfer_engine treats it as a normal per-item
+        # failure and moves on to the next item.
+        from pymobiledevice3.exceptions import AfcException
 
-        chunk = self._run(self._afc.fread(self._open_handle, length))
-        self._open_position += len(chunk)
-        if not chunk:
-            self._close_open_handle()
-        return chunk
+        last_exc: Optional[Exception] = None
+        for attempt in range(settings.AFC_READ_RETRY_ATTEMPTS):
+            try:
+                if attempt > 0 or self._open_path != remote_path or offset != self._open_position:
+                    if offset != 0:
+                        raise SeekNotSupportedError(remote_path)
+                    self._close_open_handle()
+                    self._open_handle = self._run(self._afc.fopen(remote_path, "r"))
+                    self._open_path = remote_path
+                    self._open_position = 0
+
+                chunk = self._run(self._afc.fread(self._open_handle, length))
+                self._open_position += len(chunk)
+                if not chunk:
+                    self._close_open_handle()
+                return chunk
+            except SeekNotSupportedError:
+                raise
+            except AfcException:
+                self._close_open_handle()
+                raise
+            except Exception as exc:  # pylint: disable=broad-except
+                last_exc = exc
+                _logger.warning(
+                    "afc_client: read_chunk failed remote_path=%s attempt=%s/%s",
+                    remote_path,
+                    attempt + 1,
+                    settings.AFC_READ_RETRY_ATTEMPTS,
+                    exc_info=True,
+                )
+                self._close_open_handle()
+                if attempt + 1 < settings.AFC_READ_RETRY_ATTEMPTS:
+                    time.sleep(settings.AFC_READ_RETRY_DELAY_SECONDS)
+
+        assert last_exc is not None
+        raise AfcConnectionLostError(str(last_exc)) from last_exc
 
     def _close_open_handle(self) -> None:
         if self._open_handle is not None:

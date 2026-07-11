@@ -24,4 +24,10 @@ export const api = {
   deleteBatch: (itemIds) => backendCall("delete.batch", { item_ids: itemIds }),
   settingsGet: () => backendCall("settings.get"),
   settingsSet: (values) => backendCall("settings.set", { values }),
+  // Library Cleanup module (spec §11) - fully independent of the iPhone-transfer
+  // calls above, no udid anywhere.
+  libraryScanStart: (root) => backendCall("library_scan.start", { root }),
+  libraryScanGroups: () => backendCall("library_scan.groups"),
+  libraryDeleteBatch: (libraryFileIds, permanent) =>
+    backendCall("library_delete.batch", { library_file_ids: libraryFileIds, permanent }),
 };

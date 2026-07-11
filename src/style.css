@@ -30,12 +30,42 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
 header h1 {
   font-size: 16px;
   margin: 0;
   font-weight: 600;
+}
+
+#mode-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.mode-tab {
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mode-tab:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.mode-tab.active {
+  background: var(--accent);
+  color: white;
 }
 
 main {
@@ -61,6 +91,18 @@ main {
 
 .screen[hidden] {
   display: none;
+}
+
+/* Library Cleanup module's review screen needs real width for a grid of duplicate
+   groups/thumbnails, unlike the narrow single-column transfer-flow screens. */
+.screen-wide {
+  max-width: 900px;
+  text-align: left;
+  align-items: stretch;
+}
+
+.screen-wide p {
+  text-align: left;
 }
 
 .screen h2 {
@@ -172,6 +214,143 @@ button.secondary {
   display: flex;
   gap: 12px;
   justify-content: center;
+}
+
+.library-groups {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.dup-group {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.dup-group-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.dup-group-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dup-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 170px;
+  cursor: pointer;
+}
+
+.dup-member-thumb {
+  width: 170px;
+  height: 170px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  cursor: zoom-in;
+}
+
+.dup-member:has(.dup-member-checkbox:checked) .dup-member-thumb {
+  border-color: var(--danger);
+}
+
+.dup-member-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 100%;
+}
+
+.dup-member-path {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Comparison modal (click a thumbnail to open) - reuses the *same* DOM nodes as the
+   review grid (see ui.js openCompareModal), just relocated and shown bigger, so
+   selection state (checkbox .checked) never needs separate syncing. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  z-index: 100;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-content {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.dup-group-members-large {
+  justify-content: center;
+}
+
+.dup-group-members-large .dup-member {
+  width: 380px;
+}
+
+.dup-group-members-large .dup-member-thumb {
+  width: 380px;
+  height: 380px;
+  cursor: default;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  margin: 12px 0;
+  cursor: pointer;
+}
+
+.checkbox-row input {
+  width: auto;
 }
 
 .spinner {

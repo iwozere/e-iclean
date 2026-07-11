@@ -1,12 +1,13 @@
 """Transfer engine: chunked copy, resume-from-offset, date-based destination nesting,
 and disconnect handling."""
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from app.device.afc_client import MockAfcClient
-from app.models import STATUS_COPIED, STATUS_PARTIAL, TransferItem
-from app.services.transfer_engine import TransferEngine
+from app.device.afc_client import AfcConnectionLostError, MockAfcClient
+from app.models import STATUS_COPIED, STATUS_FAILED, STATUS_PARTIAL, STATUS_PENDING, TransferItem
+from app.services.transfer_engine import OUTCOME_DISCONNECTED, OUTCOME_DRAINED, TransferEngine
 from app.db import get_session
 
 JULY = datetime(2026, 7, 15, 12, 0, 0)
@@ -149,15 +150,135 @@ async def test_disconnect_marks_item_partial_and_emits_connection_lost(destinati
 
     class DisconnectingAfc(MockAfcClient):
         def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
-            raise OSError("device disconnected")
+            raise AfcConnectionLostError("device disconnected")
 
     afc = DisconnectingAfc({remote_path: data})
 
     engine = TransferEngine("udid-1", destination, afc, events)
-    await engine.run()
+    outcome = await engine.run()
+
+    assert outcome == OUTCOME_DISCONNECTED
 
     with get_session() as session:
         item = session.get(TransferItem, item_id)
         assert item.status == STATUS_PARTIAL
 
     assert any(event == "connection_lost" for event, _ in events.collected)
+
+
+async def test_disconnect_leaves_other_pending_items_untouched(destination, events):
+    """A disconnect on item 1 of many must not silently touch the rest of the queue -
+    they stay `pending` for a later resume/retry, not `failed` (see
+    docs/DEVELOPMENT.md: the caller distinguishing OUTCOME_DISCONNECTED from
+    OUTCOME_DRAINED is what a mid-transfer connection loss depends on)."""
+    remote_path_a = "/DCIM/100APPLE/IMG_0001.HEIC"
+    remote_path_b = "/DCIM/100APPLE/IMG_0002.HEIC"
+    data = b"z" * 8192
+    _make_item(remote_path_a, data, JULY)
+    item_b_id = _make_item(remote_path_b, data, JULY)
+
+    class DisconnectingAfc(MockAfcClient):
+        def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
+            raise AfcConnectionLostError("device disconnected")
+
+    afc = DisconnectingAfc({remote_path_a: data, remote_path_b: data})
+
+    engine = TransferEngine("udid-1", destination, afc, events)
+    await engine.run()
+
+    with get_session() as session:
+        item_b = session.get(TransferItem, item_b_id)
+        assert item_b.status == STATUS_PENDING
+
+
+async def test_per_file_error_fails_only_that_item_and_continues_queue(destination, events):
+    """A single missing/inaccessible file (pymobiledevice3's AfcFileNotFoundError in
+    the real client) must NOT be treated as a disconnect - confirmed live against a
+    real ~141GB/12k-item transfer, where one bad file (out of 12174) was
+    misclassified as AfcConnectionLostError and paused the *entire* queue, showing a
+    misleading "Connection lost" banner. Only that one item should fail; the rest of
+    the queue must still drain."""
+    remote_path_bad = "/DCIM/141APPLE/IMG_1843.HEIC"
+    remote_path_ok = "/DCIM/100APPLE/IMG_0002.HEIC"
+    data = b"z" * 8192
+    bad_item_id = _make_item(remote_path_bad, data, JULY)
+    ok_item_id = _make_item(remote_path_ok, data, JULY)
+
+    class OneBadFileAfc(MockAfcClient):
+        def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
+            if remote_path == remote_path_bad:
+                raise FileNotFoundError(f"[Errno 8] Opcode: FILE_OPEN failed with status: 8: {remote_path}")
+            return super().read_chunk(remote_path, offset, length)
+
+    afc = OneBadFileAfc({remote_path_bad: data, remote_path_ok: data})
+
+    engine = TransferEngine("udid-1", destination, afc, events)
+    outcome = await engine.run()
+
+    assert outcome == OUTCOME_DRAINED
+    assert not any(event == "connection_lost" for event, _ in events.collected)
+
+    with get_session() as session:
+        bad_item = session.get(TransferItem, bad_item_id)
+        ok_item = session.get(TransferItem, ok_item_id)
+        assert bad_item is not None and bad_item.status == STATUS_FAILED
+        assert ok_item is not None and ok_item.status == STATUS_COPIED
+
+
+async def test_permanently_failed_item_does_not_leave_stale_partial_file(destination, events):
+    """A permanently-failed item (e.g. a file the device can't open) must not leave a
+    stale .partial file behind - confirmed live against a real device: 102 such
+    .partial files (most 0 bytes) accumulated in "unknown-date" over a long session,
+    one per permanently-failed item, with no real download behind any of them."""
+    remote_path = "/DCIM/100APPLE/IMG_0001.HEIC"
+    data = b"z" * 8192
+    _make_item(remote_path, data, JULY)
+
+    class AlwaysFailsAfc(MockAfcClient):
+        def read_chunk(self, remote_path: str, offset: int, length: int) -> bytes:
+            raise FileNotFoundError(f"[Errno 8] Opcode: FILE_OPEN failed with status: 8: {remote_path}")
+
+    afc = AlwaysFailsAfc({remote_path: data})
+
+    engine = TransferEngine("udid-1", destination, afc, events)
+    await engine.run()
+
+    partial_path = destination / "2026-07" / "IMG_0001.HEIC.partial"
+    assert not partial_path.exists()
+
+
+async def test_concurrent_run_calls_serialize_instead_of_racing(destination, events):
+    """Two run() calls on the same engine must never execute concurrently - confirmed
+    live against a real device: a reconnect racing a still-in-flight run() (the old,
+    dying client's read retries hadn't finished failing yet) spawned a second run()
+    via resume_session_if_paused, briefly racing the original loop on the same item
+    queue. The lock must make a second call queue up rather than run alongside the
+    first."""
+    remote_path = "/DCIM/100APPLE/IMG_0001.HEIC"
+    data = b"z" * 8192
+    _make_item(remote_path, data, JULY)
+    afc = MockAfcClient({remote_path: data})
+    engine = TransferEngine("udid-1", destination, afc, events)
+
+    await engine._run_lock.acquire()  # noqa: SLF001 - simulate a run() already in flight
+    try:
+        task = asyncio.ensure_future(engine.run())
+        await asyncio.sleep(0)  # let the second call start and block on the lock
+        assert not task.done()
+    finally:
+        engine._run_lock.release()  # noqa: SLF001
+
+    outcome = await task
+    assert outcome == OUTCOME_DRAINED
+
+
+async def test_drained_queue_returns_drained_outcome(destination, events):
+    remote_path = "/DCIM/100APPLE/IMG_0004.HEIC"
+    data = b"z" * 8192
+    _make_item(remote_path, data, JULY)
+    afc = MockAfcClient({remote_path: data})
+
+    engine = TransferEngine("udid-1", destination, afc, events)
+    outcome = await engine.run()
+
+    assert outcome == OUTCOME_DRAINED

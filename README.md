@@ -51,11 +51,32 @@ you free up space on your phone** — in a batch you explicitly confirm.
 - **No app to install on your iPhone** — just the standard "Trust This Computer"
   prompt you'd see with any first-time USB connection to a computer.
 
+## Clean My Library — find duplicate photos anywhere on your PC
+
+E-iClean isn't only for photos coming off your iPhone. Its **Clean My Library** mode
+lets you point it at *any* folder on your computer — years of accumulated photos from
+any source — and finds:
+
+- **Exact duplicates** — the same photo saved more than once.
+- **Near-duplicates** — the same shot saved twice with small differences (re-exported
+  by a different app, slightly recompressed, and similar), which a simple file
+  comparison would miss.
+
+Nothing is ever deleted automatically. You review every match — with a full-size
+side-by-side comparison view for a real look before deciding, not just a tiny
+thumbnail — and pick exactly what to remove. And by default, "removing" a photo here
+doesn't delete it outright: it's moved into a sibling `-delete` folder next to the one
+you scanned, so you can double-check (or undo, by just moving it back) before clearing
+it out for good. Permanent deletion is available too, as an explicit opt-out.
+
+This is completely independent of the iPhone transfer feature above — no iPhone needs
+to be connected to use it.
+
 ## What it doesn't do (yet)
 
-E-iClean is deliberately focused on one job for now. Wi-Fi transfer, automatic
-duplicate/blur/screenshot detection, backing up things other than photos and videos,
-and macOS support are all on the roadmap but not in this first release — see
+E-iClean is deliberately focused on a small set of jobs for now. Wi-Fi transfer,
+automatic blur/screenshot detection, backing up things other than photos and videos,
+and macOS support are all on the roadmap but not in this release — see
 `docs/project_specification.md` if you're curious about what's planned.
 
 ## Requirements

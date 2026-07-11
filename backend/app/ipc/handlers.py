@@ -11,10 +11,22 @@ from typing import Awaitable, Callable, Optional
 from sqlmodel import select
 
 from app.db import get_session
-from app.device.afc_client import PymobiledeviceAfcClient
+from app.device.afc_client import AfcClient, PymobiledeviceAfcClient
 from app.device.pairing import wait_for_trust
 from app.ipc.dispatcher import register
-from app.models import STATUS_COPIED, STATUS_FAILED, STATUS_PENDING, STATUS_VERIFIED, Device, TransferItem, TransferSession
+from app.models import (
+    STATUS_COPIED,
+    STATUS_FAILED,
+    STATUS_IN_PROGRESS,
+    STATUS_PENDING,
+    STATUS_VERIFIED,
+    Device,
+    DuplicateGroup,
+    DuplicateGroupMember,
+    LibraryFile,
+    TransferItem,
+    TransferSession,
+)
 from app.schemas import (
     DeleteBatchParams,
     DeleteBatchResult,
@@ -22,10 +34,17 @@ from app.schemas import (
     DeviceConnectResult,
     DeviceInfo,
     DeviceListResult,
+    DuplicateGroupInfo,
     EmptyParams,
     EmptyResult,
+    LibraryDeleteBatchFailure,
+    LibraryDeleteBatchParams,
+    LibraryDeleteBatchResult,
     LibraryEnumerateParams,
     LibraryEnumerateResult,
+    LibraryFileInfo,
+    LibraryGroupsListResult,
+    LibraryScanStartParams,
     SettingsGetResult,
     SettingsSetParams,
     TransferSessionParams,
@@ -36,7 +55,9 @@ from app.schemas import (
 )
 from app.services.delete_service import delete_batch as run_delete_batch
 from app.services.enumeration import enumerate_library, requeue_missing_local_files
-from app.services.transfer_engine import TransferEngine
+from app.services.library_delete import delete_batch as run_library_delete_batch
+from app.services.library_scan import scan_library
+from app.services.transfer_engine import OUTCOME_DRAINED, TransferEngine
 from app.services.verification import verify_session
 from app.state import state
 from app.utils.errors import DEVICE_NOT_FOUND, app_error
@@ -98,6 +119,15 @@ async def handle_device_connect(params: DeviceConnectParams) -> DeviceConnectRes
         session.add(device)
         session.commit()
 
+    # Resume from here, now that `afc` above is confirmed fresh - not from the
+    # backend's raw usbmux device_connected event (app.main), which fires before this
+    # trust-wait/AFC-handshake completes and would otherwise resume a paused engine
+    # through the very client this function is about to replace/close on the next
+    # reconnect. See docs/DEVELOPMENT.md for the race this caused (stale AfcClient ->
+    # immediate re-disconnect -> a stray verification_complete that snapped the UI back
+    # to "Free Up Space" right after Re-check Library, making Start Transfer a no-op).
+    await resume_session_if_paused(params.udid, afc)
+
     return DeviceConnectResult(status="connected", device=DeviceInfo(udid=params.udid))
 
 
@@ -130,7 +160,8 @@ async def handle_transfer_start(params: TransferStartParams) -> TransferStartRes
 
 
 def _retry_failed_items(udid: str) -> None:
-    """Reset failed items back to pending so a fresh Start Transfer retries them.
+    """Reset failed/orphaned in_progress items back to pending so a fresh Start
+    Transfer retries them.
 
     Previously, a failed item was stuck forever - _next_item_id only ever selects
     pending/partial, so nothing revisited it. That's a real problem now that a real
@@ -138,18 +169,28 @@ def _retry_failed_items(udid: str) -> None:
     _local_filename) that left ~1000 items permanently failed with no way to recover
     without restarting the whole device from scratch. Treat "Start Transfer" as
     "finish the job" - retry everything not yet verified, not just what's pending.
+
+    in_progress items are included for the same reason - confirmed live against a
+    real device: if the app closes (or the backend crashes) while an item is mid-copy,
+    it's stuck at in_progress forever, since _next_item_id only selects pending/
+    partial and nothing else ever revisits that status. Nothing "in progress" can
+    possibly survive across a fresh TransferEngine anyway (no engine object persists
+    the closure), so it's always safe to requeue.
     """
     with get_session() as session:
-        failed = session.exec(
-            select(TransferItem).where(TransferItem.device_udid == udid, TransferItem.status == STATUS_FAILED)
+        unfinished = session.exec(
+            select(TransferItem).where(
+                TransferItem.device_udid == udid,
+                TransferItem.status.in_([STATUS_FAILED, STATUS_IN_PROGRESS]),  # type: ignore[union-attr]
+            )
         ).all()
-        for item in failed:
+        for item in unfinished:
             item.status = STATUS_PENDING
             item.error_message = None
             item.bytes_transferred = 0
             session.add(item)
-        if failed:
-            _logger.info("ipc.handlers: retrying %s previously failed items udid=%s", len(failed), udid)
+        if unfinished:
+            _logger.info("ipc.handlers: retrying %s previously failed/orphaned items udid=%s", len(unfinished), udid)
             session.commit()
 
 
@@ -171,7 +212,14 @@ def _get_or_create_session(udid: str) -> int:
 
 
 async def _run_transfer_then_verify(session_id: int, engine: TransferEngine, udid: str) -> None:
-    await engine.run()
+    outcome = await engine.run()
+    if outcome != OUTCOME_DRAINED:
+        # Paused/cancelled/disconnected: items are still pending/partial in the DB,
+        # not verifiable failures - a later Start Transfer (or, for disconnected, the
+        # reconnect-triggered resume in handle_device_connect) will pick them back up.
+        # Running verification/emitting verification_complete here would prematurely
+        # report every not-yet-attempted item as "could not be copied or verified".
+        return
     await verify_session(udid, _events())
 
     # verify_session only emits verification_progress for items it actually verified
@@ -198,15 +246,18 @@ async def _run_transfer_then_verify(session_id: int, engine: TransferEngine, udi
     )
 
 
-async def resume_session_if_paused(udid: str) -> None:
-    """Called by app.main when a device reconnects: resume any engine that was
-    paused by a `connection_lost` event for this udid (spec §5.4 reconnection)."""
+async def resume_session_if_paused(udid: str, afc: AfcClient) -> None:
+    """Called by handle_device_connect once a fresh AFC session is confirmed: resume
+    any engine that was paused by a `connection_lost` event for this udid (spec §5.4
+    reconnection). `afc` must be the just-established client for this udid - reusing
+    the engine's old one would immediately re-disconnect against a closed connection."""
     for session_id, session_udid in state.session_udid_by_id.items():
         if session_udid != udid:
             continue
         engine = state.engines.get(session_id)
         if engine is not None:
             _logger.info("ipc.handlers: resuming session_id=%s after reconnect", session_id)
+            engine.set_afc(afc)
             asyncio.create_task(_run_transfer_then_verify(session_id, engine, udid))
 
 
@@ -254,6 +305,91 @@ async def handle_delete_batch(params: DeleteBatchParams) -> DeleteBatchResult:
 
     deleted_count, failures = await run_delete_batch(params.item_ids, afc, _events())
     return DeleteBatchResult(deleted_count=deleted_count, failures=failures)
+
+
+# --- library_scan.* / library_delete.* (Library Cleanup module, spec §11) ---
+# Fully independent of the device/transfer handlers above - no udid, no AFC, no
+# `state.afc_clients` lookup anywhere below.
+
+
+@register("library_scan.start", LibraryScanStartParams)
+async def handle_library_scan_start(params: LibraryScanStartParams) -> EmptyResult:
+    # Fire-and-forget, mirroring transfer.start (handle_transfer_start above) - a
+    # scan of thousands of files must not block the IPC call itself; progress and
+    # completion are reported via events instead.
+    asyncio.create_task(_run_library_scan(params.root))
+    return EmptyResult()
+
+
+async def _run_library_scan(root: str) -> None:
+    async def emit(event: str, data: object) -> None:
+        await _events()(event, data)
+
+    try:
+        scanned_count, group_count = await scan_library(root, emit)
+    except ValueError as exc:
+        # e.g. the caller pointed the scan at a *-delete staging folder directly -
+        # scan_library refuses this outright (spec FR-L8). Surface it as an error
+        # event rather than silently dropping the background task's exception.
+        _logger.warning("library_scan: refused root=%s: %s", root, exc)
+        await _events()("error", {"message": str(exc)})
+        return
+
+    await _events()(
+        "library_scan_complete",
+        {"scanned_count": scanned_count, "group_count": group_count},
+    )
+
+
+@register("library_scan.groups", EmptyParams)
+async def handle_library_scan_groups(_params: EmptyParams) -> LibraryGroupsListResult:
+    with get_session() as session:
+        groups = session.exec(select(DuplicateGroup)).all()
+        result_groups = []
+        for group in groups:
+            assert group.id is not None
+            memberships = session.exec(
+                select(DuplicateGroupMember).where(DuplicateGroupMember.group_id == group.id)
+            ).all()
+            members = []
+            for membership in memberships:
+                lib_file = session.get(LibraryFile, membership.library_file_id)
+                if lib_file is None:
+                    continue
+                assert lib_file.id is not None
+                members.append(
+                    LibraryFileInfo(
+                        id=lib_file.id,
+                        local_path=lib_file.local_path,
+                        size_bytes=lib_file.size_bytes,
+                        modified_at=lib_file.modified_at,
+                    )
+                )
+            result_groups.append(
+                DuplicateGroupInfo(
+                    id=group.id,
+                    group_type=group.group_type,
+                    similarity_score=group.similarity_score,
+                    members=members,
+                )
+            )
+    return LibraryGroupsListResult(groups=result_groups)
+
+
+@register("library_delete.batch", LibraryDeleteBatchParams)
+async def handle_library_delete_batch(params: LibraryDeleteBatchParams) -> LibraryDeleteBatchResult:
+    if not params.library_file_ids:
+        return LibraryDeleteBatchResult(deleted_count=0, failures=[])
+
+    deleted_count, failures = await asyncio.to_thread(
+        run_library_delete_batch, params.library_file_ids, params.permanent
+    )
+    return LibraryDeleteBatchResult(
+        deleted_count=deleted_count,
+        failures=[
+            LibraryDeleteBatchFailure(library_file_id=f.library_file_id, message=f.message) for f in failures
+        ],
+    )
 
 
 @register("settings.get", EmptyParams)

@@ -6,10 +6,23 @@ and how to install it, see the top-level [README.md](../README.md). See
 Rust&harr;Python contract. Contributor conventions live in `../AGENTS.md` — read it
 before making changes.
 
-**Status:** MVP scaffold in progress. Backend transfer/verify/delete logic is
-implemented and unit-tested against a mocked device layer; the Tauri shell and web UI
-are wired end-to-end but have not yet been exercised against a real iPhone (no
-hardware in this dev environment — see "Known gaps" below).
+**Status:** MVP core loop validated end-to-end against real hardware (v0.1.5). A real
+~12,179-item / 141 GB iPhone library has been fully transferred, verified (12,073
+verified, 102 permanently failed on files the device itself can't open, 4 recovered
+from an orphaned `in_progress` state), and survived multiple real disconnects, several
+full app restarts mid-transfer, and an overnight idle period, all resuming correctly.
+Remaining before MVP acceptance criteria (spec §5.10) are fully closed: an end-to-end
+**delete** ("Free Up Space") pass on this same large library hasn't been exercised yet
+(transfer + verify only, this round), and today's fixes haven't been re-validated
+against the **frozen** PyInstaller build specifically (dev mode only so far — see
+"Freezing the backend" below). See "Known gaps" below for the full list, including
+several real bugs found and fixed via this real-device session.
+
+**Also implemented (v0.1.8, 2026-07-11):** the Library Cleanup module (spec §11) - a
+second, independent "Clean My Library" mode for finding exact/near-duplicate photos in
+any local folder, with a safe move-to-`<root>-delete` default instead of permanent
+delete. Built ahead of MVP being fully closed out, at the user's explicit request (see
+spec §11's status note). Validated against a real ~1,264-file folder.
 
 ## Architecture
 
@@ -154,15 +167,19 @@ scaffold:
   the window itself had no debugging value. Left visible in dev mode intentionally,
   in case seeing the raw Python console directly is useful while iterating.
 
-- **Real-device testing has started, not finished.** Once Apple Mobile Device Support
-  was installed (see the driver-detection bullet below) a real iPhone connected,
-  paired, and passed the trust handshake in this environment for the first time —
-  but `library.enumerate` immediately crashed (see the next bullet), so enumeration,
-  transfer, verify, and delete against real hardware are still unexercised past that
-  point. All backend logic remains additionally tested against a mocked AFC client
-  (`app.device.afc_client.MockAfcClient`) for the parts hardware hasn't reached yet.
-  The acceptance criteria in spec §5.10 (5,000+ item libraries, physical cable-pull
-  tests, etc.) still need to run for real.
+- **Real-device testing: connect/enumerate/transfer/verify are now extensively
+  exercised; delete is not yet.** Earlier attempts hit an immediate `library.enumerate`
+  crash (see the next bullet) that blocked everything past pairing. That's long since
+  fixed - a real ~12,179-item / 141 GB library has since been fully enumerated,
+  transferred, and verified end-to-end (12,073 verified, see the bug list above for
+  everything that surfaced and got fixed along the way), including real cable/USB
+  disconnects, several full app restarts mid-transfer, and an overnight idle gap, all
+  resuming correctly. Spec §5.10's "5,000+ items" criterion is comfortably exceeded.
+  Still open: an end-to-end **delete** ("Free Up Space") pass on this same library
+  (transfer + verify only, so far), and re-validating against the **frozen**
+  PyInstaller build specifically (all of the above was dev mode). All backend logic
+  remains additionally tested against a mocked AFC client
+  (`app.device.afc_client.MockAfcClient`) for fast, hardware-free regression coverage.
 - **`AfcService.listdir`/`stat`/`fopen`/`rm` are coroutines too — the earlier "not
   async" claim was a false negative from a flawed check, now fixed.** The first real
   device connection surfaced `TypeError: 'coroutine' object is not iterable` from
@@ -176,17 +193,19 @@ scaffold:
   `backend/app/device/afc_client.py` now wrap every `self._afc.*` call in
   `asyncio.run(...)`. Lesson: don't trust `inspect.iscoroutinefunction` through an
   unfamiliar decorator — a live smoke test is what actually caught this, twice.
-- **AFC seek/resume (spec §9 open question 3) — partially resolved by API
-  inspection, not yet by hardware test.** Confirmed by reading pymobiledevice3
-  9.32.0's source directly: `AfcService` has no `fseek` at all — `fopen`/`fread`/
-  `fclose` only support one sequential cursor per handle. `PymobiledeviceAfcClient`
-  (see `backend/app/device/afc_client.py`) is written around that constraint: it
-  keeps one handle open across sequential chunk reads within a file, and raises
+- **AFC seek/resume (spec §9 open question 3) — resolved, confirmed against real
+  hardware.** Confirmed by reading pymobiledevice3 9.32.0's source directly:
+  `AfcService` has no `fseek` at all — `fopen`/`fread`/`fclose` only support one
+  sequential cursor per handle. `PymobiledeviceAfcClient` (see
+  `backend/app/device/afc_client.py`) is written around that constraint: it keeps one
+  handle open across sequential chunk reads within a file, and raises
   `SeekNotSupportedError` (triggering the documented single-file-restart fallback in
   `transfer_engine.py`) whenever a requested offset doesn't match the live sequential
-  position — e.g. resuming after an app restart. This logic is unverified against a
-  real device/iOS version; a first real-hardware test is the next step, not a
-  from-scratch investigation.
+  position — e.g. resuming after an app restart. Now confirmed live against a real
+  device across many thousands of `seek unsupported, restarting item_id=...` events:
+  the single-file restart-from-zero fallback works as designed. The default answer
+  from spec §9.3 stands - "resume at the file level, restart at the byte level" - not
+  the alternative (byte-level seek), which this AFC surface doesn't support at all.
 - **pymobiledevice3 API is more async than the spec assumed, now confirmed and
   fixed**: `usbmux.list_devices`, `lockdown.create_using_usbmux`, and every used
   `AfcService` method (`connect/fread/fwrite/fclose/close/listdir/stat/fopen/rm`) are
@@ -240,6 +259,136 @@ scaffold:
   see the model's docstring for why a generic key/value table rather than a dedicated
   column per setting.
 - **Destination free-space warning** (spec §5.7 point 3) is not yet implemented.
+- **Fixed: a mid-transfer disconnect jumped straight to "Free Up Space" and reported
+  thousands of never-attempted items as unrecoverable failures.** Root cause:
+  `TransferEngine.run()` (`backend/app/services/transfer_engine.py`) returned `None`
+  on every exit path — drained, paused, cancelled, *or* disconnected were all
+  indistinguishable to the caller. `handlers.py::_run_transfer_then_verify` ran
+  verification and emitted `verification_complete` unconditionally after every
+  `run()` call, so a disconnect after copying 1 of 12,174 items looked identical to
+  "the queue actually finished," and the UI reported the other 12,173 untouched items
+  as "could not be copied or verified." Fixed by giving `run()` a real return value
+  (`OUTCOME_DRAINED`/`PAUSED`/`CANCELLED`/`DISCONNECTED`) and only running
+  verification on `OUTCOME_DRAINED` — see `docs/ipc_protocol.md`'s
+  `verification_complete` entry.
+- **Fixed: the reconnect-triggered auto-resume raced its own client teardown,
+  compounding the bug above.** On reconnect, the backend used to auto-resume via the
+  raw usbmux `device_connected` event (`app/main.py`) — which fires *before* the
+  trust-wait/AFC-handshake that `handle_device_connect` performs. That handshake
+  closes the previous `AfcClient` and installs a fresh one; the auto-resume, racing
+  ahead of it, kept reading through the client that was mid-teardown, immediately
+  re-disconnected, and (via the bug above) fired another spurious
+  `verification_complete` — which is what made "Start Transfer" look like a no-op
+  right after a user clicked "Re-check Library": the screen was being silently
+  snapped back to "Free Up Space" by a stale background task the user never
+  triggered. Fixed by moving the resume trigger into `handle_device_connect` itself,
+  after its own fresh `AfcClient` is confirmed in place
+  (`TransferEngine.set_afc`), and removing the racy call from `app/main.py`.
+- **Fixed: a single missing/inaccessible file on the device was misclassified as a
+  full device disconnect, pausing the entire queue.** The biggest real-world impact
+  bug found this session. `_read_chunk_safe` used to wrap *any* exception from
+  `AfcClient.read_chunk` as `DEVICE_DISCONNECTED`. Against the real ~12k-item
+  library, a meaningful fraction of files (~13-20% in some ranges) raise
+  `pymobiledevice3.exceptions.AfcFileNotFoundError` ("[Errno 8] ... status: 8") when
+  opened - the device answering normally, just with an error status, most likely
+  files whose full-resolution originals aren't actually downloaded to the device
+  (iCloud "Optimize Storage"). Every one of these was pausing the *entire* transfer
+  and showing a misleading "Connection lost" banner for something that was never a
+  connection problem. Fixed with a device-layer distinction
+  (`backend/app/device/afc_client.py`): `AfcException` (and subclasses) means "the
+  device answered, just with an error for this file" and is left to propagate as a
+  normal per-item failure; only a new `AfcConnectionLostError` - raised after a
+  bounded retry-with-backoff (`AFC_READ_RETRY_ATTEMPTS`/`AFC_READ_RETRY_DELAY_SECONDS`
+  in `app/config.py`) on genuine transport-level failures - maps to
+  `DEVICE_DISCONNECTED`. The retry loop also absorbs brief real connection blips
+  (confirmed live: `OSError [WinError 10053]`/`ConnectionResetError`) without ever
+  surfacing "Connection lost" to the user at all.
+- **Fixed: a reconnect racing a still-in-flight `run()` could spawn a second,
+  fully-concurrent transfer loop on the same engine.** `TRANSFER_CONCURRENCY` is
+  explicitly 1 (see the module docstring in `transfer_engine.py`), but nothing
+  actually enforced that across a reconnect: `resume_session_if_paused` fired a new
+  `run()` via `asyncio.create_task` without checking whether the previous `run()` (on
+  the engine's dying, pre-reconnect client) had actually returned yet. Confirmed live
+  against a real device: a brief real disconnect produced two `run()` loops racing
+  the same item queue for a sub-second window; because both loops share one
+  `PymobiledeviceAfcClient` instance (which has a single mutable open-file-handle
+  state, not reentrant for concurrent *different* files), a second, longer-lived
+  occurrence of this race caused a genuine livelock - two loops perpetually clobbering
+  each other's open-file state, throwing `SeekNotSupportedError`, restarting from
+  byte 0, and immediately being clobbered again, forever, with zero forward progress
+  until the app was restarted. Fixed with a per-engine `asyncio.Lock` around the body
+  of `run()` (`TransferEngine._run_lock`) - a second call now queues up and starts
+  only once the first has fully exited, preserving the auto-continuation behavior
+  (the resumed run picks up where the dying one left off) without ever running
+  alongside it.
+- **Fixed: the on-screen transfer progress (%, GB) was a purely in-memory,
+  session-local counter that reset to 0 on every app restart**, even though the
+  destination folder (and the DB) still remembered everything genuinely copied in
+  earlier sessions. Confirmed live: after a restart mid-transfer, the UI showed "0% -
+  650MB" while the destination folder already had 52 GB on disk from earlier
+  sessions. Root cause: `src/main.js`'s `handleTransferProgress` summed
+  `bytes_transferred` only from `transfer_progress` events received since the current
+  page load (`state.transferredByItem`), with no seeding from persisted state. Fixed
+  by having the backend compute and include an authoritative, DB-sourced
+  `device_bytes_transferred` (sum across every item for the device) on every
+  `transfer_progress` event (`TransferEngine._device_bytes_transferred`,
+  `docs/ipc_protocol.md`) - the frontend now just displays that directly instead of
+  reconstructing a running total itself.
+- **Fixed: an item left `in_progress` when the app closes/crashes mid-copy was
+  orphaned forever.** `_next_item_id` only ever selects `pending`/`partial`; nothing
+  reset `in_progress` back to `pending` on the next `transfer.start`, unlike `failed`
+  items (`handlers.py::_retry_failed_items`, existing behavior). Confirmed live: 4
+  items were still stuck `in_progress` hours after the interrupted session that
+  produced them. Nothing "in progress" can survive across a fresh `TransferEngine`
+  anyway (no engine object persists the closure), so it's always safe to requeue -
+  `_retry_failed_items` now resets both `failed` and `in_progress` items back to
+  `pending`.
+- **Fixed: a permanently-failed item left a stale, empty `.partial` file behind
+  forever.** `_mark_failed` never cleaned up the `.partial` file its own attempt had
+  created. Confirmed live: 102 zero-byte `.partial` files accumulated in
+  `unknown-date` over one long session, one per permanently-failed item (see the
+  `AfcFileNotFoundError` bug above - these files were never actually downloaded, so
+  the `.partial` was 0 bytes, not real partial data). `_mark_failed` now deletes the
+  item's `.partial` file (if any) after marking it failed.
+- **Diagnostics gap, fixed in passing:** `TransferEngine.run()`'s `DEVICE_DISCONNECTED`
+  branch used to log nothing at all, unlike the adjacent per-item-failure branch -
+  found the hard way, debugging a live disconnect with an empty log for the exact
+  window that mattered. Now logs item id, udid, and the underlying error detail.
+- **Added: Library Cleanup module (spec §11) - "Clean My Library" mode, fully
+  independent of the iPhone-transfer flow.** New backend services
+  (`app/services/library_scan.py`, `library_delete.py`), new SQLite tables
+  (`library_files`, `duplicate_groups`, `duplicate_group_members`), new IPC methods
+  (`library_scan.start`/`.groups`, `library_delete.batch`, see `ipc_protocol.md`), and
+  a new frontend mode (`src/index.html`'s `#mode-library`, wired in `main.js`/`ui.js`).
+  Perceptual-hash near-duplicate detection uses `imagehash`/Pillow (new
+  `backend/requirements.txt` deps). The filename-collision disambiguation convention
+  from the transfer engine was extracted into a shared `app/utils/naming.py` rather
+  than reimplemented, since `library_delete.py` needs the identical logic for its own
+  collision case (spec §11.5).
+  - **Fixed, found via a real ~1,264-file scan:** the scan itself (hashing, grouping -
+    27 groups correctly found) completed successfully in the backend, but the UI
+    stayed stuck on "Scanning..." forever. Root cause: `handleLibraryScanComplete`
+    (`src/main.js`) had no try/catch around fetching and rendering the results: a
+    failure there became an unhandled promise rejection (Tauri's event listener
+    doesn't await the callback), invisible to the user, that also prevented the
+    `setScreen("library-review")` call right after it from ever running. Now wrapped,
+    so any future failure here shows a real error and returns to the idle screen
+    instead of hanging silently.
+  - **UX iteration from live user feedback:** the initial review grid's 140px
+    thumbnails were too small to actually judge near-duplicates against each other
+    (blur, framing, exposure). Fixed by making thumbnails somewhat bigger (170px) and,
+    more importantly, adding a click-to-compare view: clicking a thumbnail relocates
+    that group's real DOM nodes (not copies) into a large-size (380px) modal, so
+    checkbox selection state can never drift out of sync between the grid and the
+    comparison view - see `ui.js`'s `openCompareModal`/`closeCompareModal`.
+  - **Enabling Tauri's asset protocol** (`assetProtocol.enable` + broad `scope: ["**"]`
+    in `tauri.conf.json`) was required for thumbnails to load at all via
+    `convertFileSrc` - scan roots are arbitrary user-picked folders, not a fixed known
+    location, so the scope can't be narrowed the way a typical Tauri app might.
+  - Not yet exercised live: an actual delete/move confirmed end-to-end via real
+    clicks (automated test coverage exists for `library_delete.py`; the UI flow for
+    it specifically hasn't had a live click-through at time of writing, unlike the
+    scan+review flow which has).
 
 ## Toolchain notes
 

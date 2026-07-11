@@ -37,11 +37,11 @@ async def emit_event(event: str, data: Any) -> None:
 
 async def _on_device_event(event: str, data: Any) -> None:
     await emit_event(event, data)
-    if event == "device_connected":
-        from app.ipc.handlers import resume_session_if_paused
-
-        udid = data.udid if hasattr(data, "udid") else data.get("udid")
-        await resume_session_if_paused(udid)
+    # Resuming a paused transfer here (on the raw usbmux "device is plugged in"
+    # signal) used to race the frontend's device.connect handshake - see
+    # app.ipc.handlers.handle_device_connect, which now triggers the resume itself
+    # once its own fresh AfcClient is confirmed in place, rather than duplicating
+    # the resume against whatever stale client the old engine was still holding.
 
 
 async def _handle_line(line: str) -> None:
